@@ -3,14 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="Live DonutSMP market intelligence, sale-backed pricing and actionable flips.">
-  <meta name="theme-color" content="#090b10">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23ff6332'/%3E%3Ccircle cx='32' cy='32' r='16' fill='none' stroke='white' stroke-width='10'/%3E%3C/svg%3E">
+  <meta name="description" content="Live DonutSMP market intelligence with neural network predictions.">
+  <meta name="theme-color" content="#0c0e14">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23404ebf'/%3E%3Ccircle cx='32' cy='32' r='16' fill='none' stroke='white' stroke-width='10'/%3E%3C/svg%3E">
   <title>Pulse — DonutSMP Market Intelligence</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -22,6 +23,10 @@
         <button class="nav-link" data-view="opportunities"><span class="icon">↗</span>Opportunities <em id="nav-opportunities">0</em></button>
         <button class="nav-link" data-view="market"><span class="icon">◫</span>Market explorer</button>
         <button class="nav-link" data-view="sales"><span class="icon">≋</span>Sales ledger</button>
+        <p class="nav-label">Intelligence</p>
+        <button class="nav-link" data-view="neural"><span class="icon">⬡</span>Neural predictions</button>
+        <button class="nav-link" data-view="anomalies"><span class="icon">⚡</span>Anomalies</button>
+        <button class="nav-link" data-view="charts"><span class="icon">📈</span>Price charts</button>
         <p class="nav-label">Research</p>
         <button class="nav-link" data-view="portfolio"><span class="icon">◈</span>Portfolio lab</button>
         <button class="nav-link" data-view="players"><span class="icon">◎</span>Player lookup</button>
@@ -42,7 +47,7 @@
 
       <section id="view-overview" class="view active">
         <div class="hero-panel">
-          <div><span class="kicker">Live market brief</span><h2>Trade on signal,<br><span>not speculation.</span></h2><p>Sale-backed pricing, liquidity scoring and risk-adjusted opportunities from the DonutSMP economy.</p></div>
+          <div><span class="kicker">Live market brief</span><h2>Trade on signal,<br><span>not speculation.</span></h2><p>Sale-backed pricing, liquidity scoring, neural predictions and risk-adjusted opportunities from the DonutSMP economy.</p></div>
           <div class="hero-signal"><div class="signal-orbit"><span id="hero-score">—</span><small>signals</small></div><p id="hero-caption">Analyzing the current market</p></div>
         </div>
         <div class="metric-grid" id="metric-grid"></div>
@@ -52,17 +57,21 @@
           <article class="panel"><div class="panel-head"><div><span class="kicker">Price movement</span><h3>Movers</h3></div></div><div id="movers" class="compact-list loading-block"></div></article>
           <article class="panel span-2"><div class="panel-head"><div><span class="kicker">Coverage & provenance</span><h3>Data health</h3></div></div><div id="data-health" class="health-grid"></div></article>
         </div>
+        <div class="dashboard-grid" style="margin-top:12px">
+          <article class="panel span-2"><div class="panel-head"><div><span class="kicker">Neural network forecast</span><h3>24h price predictions</h3></div></div><div id="predictions" class="compact-list loading-block"></div></article>
+          <article class="panel"><div class="panel-head"><div><span class="kicker">Model performance</span><h3>Neural net status</h3></div></div><div id="nn-status" class="compact-list loading-block"></div></article>
+        </div>
       </section>
 
       <section id="view-opportunities" class="view">
         <div class="section-intro"><div><span class="kicker">Execution-ready</span><h2>Opportunity scanner</h2><p>Every estimate includes auction tax, observed sales and a confidence-aware risk score.</p></div></div>
-        <div class="toolbar"><label class="search-field">⌕<input id="flip-search" placeholder="Search an item"></label><select id="flip-type"><option value="">All strategies</option><option value="snipe">Snipes</option><option value="craft">Crafting</option><option value="order">Orders arbitrage</option></select><select id="flip-profit"><option value="0">Any profit</option><option value="10000">10K+ profit</option><option value="100000">100K+ profit</option><option value="1000000">1M+ profit</option></select></div>
+        <div class="toolbar"><label class="search-field">⌕<input id="flip-search" placeholder="Search an item"></label><select id="flip-type"><option value="">All strategies</option><option value="snipe">Snipes</option><option value="craft">Crafting</option></select><select id="flip-profit"><option value="0">Any profit</option><option value="10000">10K+ profit</option><option value="100000">100K+ profit</option><option value="1000000">1M+ profit</option></select></div>
         <div id="flip-grid" class="cards-grid"></div>
       </section>
 
       <section id="view-market" class="view">
         <div class="section-intro"><div><span class="kicker">Fair value discovery</span><h2>Market explorer</h2><p>Compare current floor price against median realized sales and available liquidity.</p></div></div>
-        <div class="toolbar"><label class="search-field">⌕<input id="market-search" placeholder="Search the market"></label><select id="market-sort"><option value="salesValue">Highest turnover</option><option value="sales">Most sales</option><option value="listings">Most listings</option><option value="floor">Highest floor</option><option value="change">Biggest mover</option></select></div>
+        <div class="toolbar"><label class="search-field">⌕<input id="market-search" placeholder="Search the market"></label><select id="market-sort"><option value="salesValue">Highest turnover</option><option value="sales">Most sales</option><option value="listings">Most listings</option><option value="floor">Highest floor</option><option value="change">Biggest mover</option><option value="confidence">Highest confidence</option></select></div>
         <div class="table-panel"><table><thead><tr><th>Asset</th><th>Floor</th><th>Fair value</th><th>24/7d sales*</th><th>Turnover</th><th>Momentum</th><th>Confidence</th></tr></thead><tbody id="market-body"></tbody></table><div class="table-note">* Window reflects the transaction pages available from the configured data source.</div></div>
       </section>
 
@@ -70,6 +79,18 @@
         <div class="section-intro"><div><span class="kicker">Proof of price</span><h2>Sales ledger</h2><p>Observed completed transactions—not asking prices.</p></div></div>
         <div class="toolbar"><label class="search-field">⌕<input id="sales-search" placeholder="Filter completed sales"></label></div>
         <div class="table-panel"><table><thead><tr><th>Asset</th><th>Stack</th><th>Total</th><th>Unit price</th><th>Seller</th><th>Sold</th></tr></thead><tbody id="sales-body"></tbody></table><div id="sales-pagination" class="pagination"></div></div>
+      </section>
+
+      <section id="view-neural" class="view">
+        <div class="section-intro"><div><span class="kicker">Neural network forecast</span><h2>24h price predictions</h2><p>Models trained on historical auction data. Confidence-weighted predictions updated every scan.</p></div></div>
+        <div class="toolbar"><label class="search-field">⌕<input id="nn-search" placeholder="Search predictions"></label><select id="nn-filter"><option value="all">All predictions</option><option value="up">Trending up</option><option value="down">Trending down</option><option value="high-conf">High confidence (>70%)</option></select></div>
+        <div class="table-panel"><table><thead><tr><th>Asset</th><th>Current</th><th>Predicted (24h)</th><th>Change</th><th>Trend</th><th>Confidence</th><th>Signal</th></tr></thead><tbody id="nn-body"></tbody></table></div>
+        <div class="panel" style="margin-top:12px"><div class="panel-head"><h3>Training history</h3></div><div id="training-chart" style="height:120px;background:#10131a;border-radius:9px;display:flex;align-items:flex-end;padding:10px;gap:2px"></div></article>
+      </section>
+
+      <section id="view-anomalies" class="view">
+        <div class="section-intro"><div><span class="kicker">Anomaly detection</span><h2>Market anomalies</h2><p>Items with statistically unusual price movements detected by the anomaly detection model.</p></div></div>
+        <div class="cards-grid" id="anomalies-grid"></div>
       </section>
 
       <section id="view-portfolio" class="view">
@@ -82,6 +103,28 @@
         <div class="section-intro"><div><span class="kicker">Public server data</span><h2>Player intelligence</h2><p>Look up a DonutSMP username and inspect its public economy and activity profile.</p></div></div>
         <form class="player-search" id="player-form"><input id="player-name" placeholder="Enter Minecraft username" maxlength="36" required><button class="button primary">Look up player</button></form>
         <div id="player-results" class="player-results empty-message">Search for a player to begin.</div>
+      </section>
+
+      <section id="view-charts" class="view">
+        <div class="section-intro"><div><span class="kicker">Price history & technical analysis</span><h2>Price charts</h2><p>Historical price data with moving averages, volume, and neural predictions overlay.</p></div></div>
+        <div class="toolbar"><label class="search-field">⌕<input id="chart-search" placeholder="Search item"></label><select id="chart-timeframe"><option value="24h">24 hours</option><option value="7d">7 days</option><option value="30d">30 days</option></select><select id="chart-type"><option value="line">Line</option><option value="candlestick">Candlestick</option></select></div>
+        <div class="panel" style="margin-top:12px"><div class="panel-head"><h3 id="chart-title">Select an item</h3></div><canvas id="price-chart" height="400"></canvas></div>
+        <div class="dashboard-grid" style="margin-top:12px">
+          <article class="panel"><div class="panel-head"><h3>Technical indicators</h3></div><div id="chart-indicators"></div></article>
+          <article class="panel"><div class="panel-head"><h3>Neural overlay</h3></div><div id="chart-nn"></div></article>
+        </div>
+      </section>
+
+      <section id="view-item" class="view">
+        <div class="section-intro"><div><span class="kicker">Item intelligence</span><h2 id="item-title">Item detail</h2><p>Complete market data, enchantment breakdown, shulker contents, and flip analysis.</p></div></div>
+        <div class="dashboard-grid">
+          <article class="panel span-2"><div class="panel-head"><h3>Market summary</h3></div><div id="item-summary"></div></article>
+          <article class="panel"><div class="panel-head"><h3>Active listings</h3></div><div id="item-listings"></div></article>
+          <article class="panel"><div class="panel-head"><h3>Recent sales</h3></div><div id="item-sales"></div></article>
+          <article class="panel"><div class="panel-head"><h3>Enchantments</h3></div><div id="item-enchants"></div></article>
+          <article class="panel"><div class="panel-head"><h3>Shulker contents</h3></div><div id="item-shulker"></div></article>
+          <article class="panel span-2"><div class="panel-head"><h3>Price history</h3></div><canvas id="item-chart" height="250"></canvas></article>
+        </div>
       </section>
     </main>
   </div>
