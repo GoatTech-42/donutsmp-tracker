@@ -1,152 +1,147 @@
 const express = require('express');
 const http = require('http');
-const { Server } = require('socket.io');
 const path = require('path');
+const { Server } = require('socket.io');
 const AuctionAnalyzer = require('./lib/analyzer');
-const { fetchAllAuctions, fetchTransactions, leaderboard, playerLookup, playerStats } = require('./lib/donutsmp');
+const api = require('./lib/donutsmp');
+const ai = require('./lib/ai');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
-const PORT = process.env.PORT || 3001;
-
+const io = new Server(server, { serveClient: true });
+const PORT = Number(process.env.PORT || 3001);
+const SCAN_INTERVAL = Math.max(60_000, Number(process.env.SCAN_INTERVAL_MS || 300_000));
 const analyzer = new AuctionAnalyzer();
-let lastAuctions = [];
-let lastTransactions = [];
-let scanCount = 0;
-let lastScanTime = null;
+const state = { auctions: [], transactions: [], orders: [], scanCount: 0, scanning: false, lastScan: null, lastSuccess: null, lastError: null, source: api.hasApiKey ? 'live' : 'demo' };
 
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Health
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', auctions: lastAuctions.length, snapshots: analyzer.snapshots.length, scanCount, lastScan: lastScanTime, uptime: process.uptime() });
+app.disable('x-powered-by');
+app.use(express.json({ limit: '64kb' }));
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  next();
 });
+app.use(express.static(path.join(__dirname, 'public'), { maxAge: process.env.NODE_ENV === 'production' ? '1h' : 0 }));
 
-// Flips
+const numberParam = (value, fallback, min, max) => Math.min(max, Math.max(min, Number(value) || fallback));
+const asyncRoute = handler => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
+
+app.get('/api/health', (req, res) => res.json({ status: state.lastError && !state.lastSuccess ? 'degraded' : 'ok', ...publicStatus(), uptime: Math.round(process.uptime()) }));
+app.get('/api/status', (req, res) => res.json(publicStatus()));
+
+app.get('/api/overview', (req, res) => res.json({ ...analyzer.getIntelligence(state.auctions, state.transactions, state.orders), status: publicStatus() }));
 app.get('/api/flips', (req, res) => {
-  const flips = analyzer.detectFlips(lastAuctions);
-  const minProfit = parseInt(req.query.minProfit) || 0;
-  const minROI = parseFloat(req.query.minROI) || 0;
-  const type = req.query.type || '';
-  const category = req.query.category || '';
-  let filtered = flips;
-  if (minProfit > 0) filtered = filtered.filter(f => f.profit >= minProfit);
-  if (minROI > 0) filtered = filtered.filter(f => f.roi >= minROI);
-  if (type) filtered = filtered.filter(f => f.type === type);
-  if (category) filtered = filtered.filter(f => f.category === category);
-  res.json({ flips: filtered, total: filtered.length });
+  let flips = analyzer.detectFlips(state.auctions, state.transactions, state.orders);
+  const minProfit = numberParam(req.query.minProfit, 0, 0, 1e15);
+  const minRoi = numberParam(req.query.minRoi, 0, 0, 10000);
+  if (req.query.type) flips = flips.filter(x => x.type === req.query.type);
+  if (req.query.search) flips = flips.filter(x => x.name.toLowerCase().includes(String(req.query.search).toLowerCase()));
+  flips = flips.filter(x => x.profit >= minProfit && x.roi >= minRoi);
+  res.json({ flips, total: flips.length, generatedAt: new Date().toISOString() });
 });
 
-// Market intelligence
-app.get('/api/intelligence', (req, res) => {
-  const intel = analyzer.getMarketIntelligence(lastAuctions);
-  res.json(intel);
+app.get('/api/market', (req, res) => {
+  let rows = analyzer.buildMarket(state.auctions, state.transactions);
+  const search = String(req.query.search || '').toLowerCase();
+  if (search) rows = rows.filter(x => x.name.toLowerCase().includes(search));
+  const allowed = ['salesValue', 'sales', 'listings', 'floor', 'change', 'name'];
+  const sort = allowed.includes(req.query.sort) ? req.query.sort : 'salesValue';
+  const direction = req.query.direction === 'asc' ? 1 : -1;
+  rows.sort((a, b) => typeof a[sort] === 'string' ? a[sort].localeCompare(b[sort]) * direction : (a[sort] - b[sort]) * direction);
+  const page = numberParam(req.query.page, 1, 1, 10000);
+  const limit = numberParam(req.query.limit, 40, 10, 100);
+  res.json({ items: rows.slice((page - 1) * limit, page * limit), total: rows.length, page, pages: Math.max(1, Math.ceil(rows.length / limit)) });
 });
 
-// Portfolio optimizer
-app.get('/api/portfolio', (req, res) => {
-  const investment = parseInt(req.query.budget) || 1000000;
-  const portfolio = analyzer.calculatePortfolio(investment, lastAuctions);
-  res.json(portfolio);
+app.get('/api/market/:name', (req, res) => {
+  const item = analyzer.buildMarket(state.auctions, state.transactions).find(x => x.name.toLowerCase() === req.params.name.toLowerCase());
+  if (!item) return res.status(404).json({ error: 'Item not found' });
+  const listings = state.auctions.filter(x => x.itemName === item.name).sort((a, b) => a.pricePerUnit - b.pricePerUnit).slice(0, 20);
+  const sales = state.transactions.filter(x => x.itemName === item.name).slice(0, 30);
+  res.json({ item, listings, sales, history: analyzer.getHistory(item.name, 50) });
 });
 
-// Auctions
-app.get('/api/auctions', (req, res) => {
-  const search = req.query.search || '';
-  const page = parseInt(req.query.page) || 1;
-  const perPage = 50;
-  let filtered = lastAuctions;
-  if (search) {
-    const q = search.toLowerCase();
-    filtered = lastAuctions.filter(a => a.itemName.toLowerCase().includes(q));
-  }
-  const start = (page - 1) * perPage;
-  const paged = filtered.slice(start, start + perPage);
-  res.json({ auctions: paged, total: filtered.length, page, pages: Math.ceil(filtered.length / perPage) });
-});
-
-// Transactions
 app.get('/api/transactions', (req, res) => {
-  const page = parseInt(req.query.page) || 1;
-  const perPage = 50;
-  const start = (page - 1) * perPage;
-  const paged = lastTransactions.slice(start, start + perPage);
-  res.json({ transactions: paged, total: lastTransactions.length, page, pages: Math.ceil(lastTransactions.length / perPage) });
+  let rows = state.transactions;
+  const search = String(req.query.search || '').toLowerCase();
+  if (search) rows = rows.filter(x => x.itemName.toLowerCase().includes(search));
+  const page = numberParam(req.query.page, 1, 1, 10000);
+  const limit = numberParam(req.query.limit, 40, 10, 100);
+  res.json({ transactions: rows.slice((page - 1) * limit, page * limit), total: rows.length, page, pages: Math.max(1, Math.ceil(rows.length / limit)) });
 });
 
-// Leaderboards
-app.get('/api/leaderboards/:type', async (req, res) => {
-  try {
-    const data = await leaderboard(req.params.type, parseInt(req.query.page) || 1);
-    res.json(data);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+app.get('/api/orders', (req, res) => res.json({ orders: state.orders, total: state.orders.length, configured: api.ordersConfigured, note: api.ordersConfigured ? null : 'The official DonutSMP API does not expose /orders. Configure DONUTSMP_ORDERS_API_URL to connect a compatible provider.' }));
+app.get('/api/portfolio', (req, res) => res.json(analyzer.calculatePortfolio(numberParam(req.query.budget, 5_000_000, 1_000, 1e15), state.auctions, state.transactions, state.orders, numberParam(req.query.risk, 55, 10, 95))));
+app.get('/api/leaderboards/:type', asyncRoute(async (req, res) => res.json(await api.leaderboard(req.params.type, numberParam(req.query.page, 1, 1, 100)))));
+app.get('/api/player/:name', asyncRoute(async (req, res) => {
+  if (!/^[A-Za-z0-9_]{1,36}$/.test(req.params.name)) return res.status(400).json({ error: 'Invalid player name' });
+  const [lookup, stats] = await Promise.allSettled([api.playerLookup(req.params.name), api.playerStats(req.params.name)]);
+  res.json({ lookup: lookup.status === 'fulfilled' ? lookup.value : null, stats: stats.status === 'fulfilled' ? stats.value : null, source: state.source });
+}));
+
+app.post('/api/scan', asyncRoute(async (req, res) => {
+  if (state.scanning) return res.status(409).json({ error: 'A scan is already running' });
+  await runScan();
+  res.json({ ok: true, ...publicStatus() });
+}));
+
+app.post('/api/ai/analyze', asyncRoute(async (req, res) => {
+  const intel = analyzer.getIntelligence(state.auctions, state.transactions, state.orders);
+  const context = JSON.stringify({ summary: intel.summary, topFlips: intel.topFlips, movers: intel.movers }, null, 2);
+  const result = await ai.analyze(context, String(req.body?.prompt || '').slice(0, 2000));
+  res.json({ response: result.content, model: result.model, usage: result.usage });
+}));
+app.post('/api/ai/ask', asyncRoute(async (req, res) => {
+  const question = String(req.body?.question || '').trim().slice(0, 1000);
+  if (!question) return res.status(400).json({ error: 'Question is required' });
+  const intel = analyzer.getIntelligence(state.auctions, state.transactions, state.orders);
+  res.json({ response: await ai.quickInsight(question, JSON.stringify({ summary: intel.summary, topFlips: intel.topFlips.slice(0, 5) })) });
+}));
+
+app.use('/api', (req, res) => res.status(404).json({ error: 'Endpoint not found' }));
+app.use((error, req, res, next) => {
+  console.error(`[HTTP] ${req.method} ${req.path}:`, error.message);
+  res.status(error.status >= 400 && error.status < 600 ? error.status : 500).json({ error: error.message || 'Internal server error' });
 });
 
-// Player
-app.get('/api/player/:name', async (req, res) => {
-  try {
-    const [lookup, stats] = await Promise.allSettled([
-      playerLookup(req.params.name),
-      playerStats(req.params.name)
-    ]);
-    res.json({ lookup: lookup.status === 'fulfilled' ? lookup.value : null, stats: stats.status === 'fulfilled' ? stats.value : null });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// Tracked items
-app.get('/api/items', (req, res) => {
-  const items = analyzer.getTrackedItems();
-  res.json({ items, count: items.length });
-});
-
-// Item price history
-app.get('/api/item/:name/history', (req, res) => {
-  const history = analyzer.getHistory(req.params.name, parseInt(req.query.limit) || 50);
-  res.json({ item: req.params.name, history });
-});
-
-// Scan trigger
-app.post('/api/scan', async (req, res) => {
-  try {
-    await runScan();
-    res.json({ ok: true, auctions: lastAuctions.length, scanCount });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
+function publicStatus() {
+  return { source: state.source, demo: state.source === 'demo', auctions: state.auctions.length, transactions: state.transactions.length, orders: state.orders.length, ordersConfigured: api.ordersConfigured, scanCount: state.scanCount, scanning: state.scanning, lastScan: state.lastScan, lastSuccess: state.lastSuccess, lastError: state.lastError };
+}
 
 async function runScan() {
-  console.log(`[Scanner] Starting scan #${scanCount + 1}...`);
-  const auctions = await fetchAllAuctions();
-  if (auctions.length > 0) {
-    lastAuctions = auctions;
+  state.scanning = true;
+  state.lastScan = new Date().toISOString();
+  io.emit('scan:status', publicStatus());
+  try {
+    const [auctions, transactions, orders] = await Promise.all([api.fetchAllAuctions(), api.fetchTransactions(), api.fetchOrders().catch(error => { console.warn('[Orders]', error.message); return state.orders; })]);
+    if (!auctions.length) throw new Error('Upstream returned no auctions');
+    state.auctions = auctions;
+    state.transactions = transactions;
+    state.orders = orders;
+    state.scanCount += 1;
+    state.lastSuccess = new Date().toISOString();
+    state.lastError = null;
     analyzer.addSnapshot(auctions);
-    scanCount++;
-    lastScanTime = new Date().toISOString();
-    console.log(`[Scanner] Scan #${scanCount} complete: ${auctions.length} auctions`);
-    io.emit('scan:update', { auctions: auctions.length, scanCount, lastScan: lastScanTime });
+  } catch (error) {
+    state.lastError = error.message;
+    console.error('[Scanner]', error.message);
+    throw error;
+  } finally {
+    state.scanning = false;
+    io.emit('scan:update', publicStatus());
   }
 }
 
-// Auto-scan every 5 minutes
-setInterval(runScan, 5 * 60 * 1000);
+let scanTimer;
+async function start() {
+  try { await runScan(); } catch (_) { /* health endpoint reports the failure */ }
+  scanTimer = setInterval(() => runScan().catch(() => {}), SCAN_INTERVAL);
+  server.listen(PORT, '0.0.0.0', () => console.log(`[Pulse] listening on http://0.0.0.0:${PORT} (${state.source} data)`));
+}
+function shutdown() { clearInterval(scanTimer); server.close(() => process.exit(0)); }
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
 
-// Socket.IO
-io.on('connection', (socket) => {
-  console.log('[WS] Client connected');
-  socket.emit('init', { auctions: lastAuctions.length, scanCount, lastScan: lastScanTime });
-  socket.on('disconnect', () => console.log('[WS] Client disconnected'));
-});
-
-// Initial scan
-runScan().then(() => {
-  // Fetch transactions in background
-  fetchTransactions(10).then(tx => { lastTransactions = tx; console.log(`[Scanner] Loaded ${tx.length} transactions`); });
-});
-
-server.listen(PORT, '0.0.0.0', () => console.log(`[Tracker] http://0.0.0.0:${PORT}`));
+if (require.main === module) start();
+module.exports = { app, server, analyzer, state, runScan, start };

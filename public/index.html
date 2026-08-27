@@ -1,200 +1,91 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DonutSMP Tracker</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Live DonutSMP market intelligence, sale-backed pricing and actionable flips.">
+  <meta name="theme-color" content="#090b10">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23ff6332'/%3E%3Ccircle cx='32' cy='32' r='16' fill='none' stroke='white' stroke-width='10'/%3E%3C/svg%3E">
+  <title>Pulse — DonutSMP Market Intelligence</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style.css">
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
-  <div id="app">
-    <aside id="sidebar">
-      <div class="sidebar-brand">
-        <div class="brand-icon">D</div>
-        <span class="brand-text">DonutSMP Tracker</span>
-      </div>
-      <nav class="sidebar-nav">
-        <div class="nav-section">Analytics</div>
-        <button class="nav-item active" data-tab="dashboard" data-title="Dashboard">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
-          Dashboard
-        </button>
-        <button class="nav-item" data-tab="flips" data-title="Flip Finder">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2h4v4H2zM10 2h4v4h-4zM6 6h4v4H6zM2 10h4v4H2zM10 10h4v4h-4z"/></svg>
-          Flip Finder
-          <span class="nav-badge" id="flip-count">0</span>
-        </button>
-        <button class="nav-item" data-tab="portfolio" data-title="Portfolio Optimizer">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2h12v2H2zm0 4h12v8H2z"/></svg>
-          Portfolio
-        </button>
-        <div class="nav-section">Market</div>
-        <button class="nav-item" data-tab="auctions" data-title="Auction House">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1L1 6v2h14V6L8 1zM3 10v3h10v-3H3z"/></svg>
-          Auctions
-        </button>
-        <button class="nav-item" data-tab="transactions" data-title="Recent Sales">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1v14M1 8h14" stroke="currentColor" stroke-width="2" fill="none"/></svg>
-          Transactions
-        </button>
-        <button class="nav-item" data-tab="leaderboards" data-title="Leaderboards">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2h8v4H4zM2 6h4v8H2zM10 6h4v8h-4z"/></svg>
-          Leaderboards
-        </button>
-        <div class="nav-section">Tools</div>
-        <button class="nav-item" data-tab="player" data-title="Player Lookup">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
-          Players
-        </button>
-        <button class="nav-item" data-tab="ai" data-title="AI Analyst">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="5.5" cy="6.5" r="1"/><circle cx="10.5" cy="6.5" r="1"/><path d="M5 10.5c.8 1 2.2 1.5 3 1.5s2.2-.5 3-1.5" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
-          AI Analyst
-        </button>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="#overview" aria-label="Pulse overview"><span class="brand-mark"><i></i></span><span><b>Pulse</b><small>DonutSMP intelligence</small></span></a>
+      <nav aria-label="Primary navigation">
+        <p class="nav-label">Workspace</p>
+        <button class="nav-link active" data-view="overview"><span class="icon">⌁</span>Overview</button>
+        <button class="nav-link" data-view="opportunities"><span class="icon">↗</span>Opportunities <em id="nav-opportunities">0</em></button>
+        <button class="nav-link" data-view="market"><span class="icon">◫</span>Market explorer</button>
+        <button class="nav-link" data-view="sales"><span class="icon">≋</span>Sales ledger</button>
+        <p class="nav-label">Research</p>
+        <button class="nav-link" data-view="portfolio"><span class="icon">◈</span>Portfolio lab</button>
+        <button class="nav-link" data-view="players"><span class="icon">◎</span>Player lookup</button>
       </nav>
-      <div class="sidebar-footer">
-        <div class="footer-stats">
-          <div class="footer-row"><span>Scanner</span><span id="s-status">Starting...</span></div>
-          <div class="footer-row"><span>Last scan</span><span id="s-last">-</span></div>
-          <div class="footer-row"><span>Auctions</span><span id="s-count">0</span></div>
-          <div class="footer-row"><span>Tracked</span><span id="s-tracked">0</span></div>
-        </div>
+      <div class="source-card">
+        <div class="source-row"><span><i class="live-dot"></i>Data source</span><b id="source-label">Connecting</b></div>
+        <p id="source-note">Preparing market feed…</p>
+        <div class="freshness"><span id="scan-count">Scan #0</span><span id="last-scan">—</span></div>
       </div>
     </aside>
 
-    <div id="main">
-      <header id="topbar">
-        <div id="page-title">Dashboard</div>
-        <div class="topbar-right">
-          <div class="topbar-pill"><span class="dot"></span> <span id="tb-status">Live</span></div>
-          <div class="topbar-pill"><span id="tb-scan">Scan #0</span></div>
-          <button class="btn btn-primary btn-sm" onclick="triggerScan()">Scan Now</button>
-        </div>
+    <main>
+      <header class="topbar">
+        <button class="menu-button" id="menu-button" aria-label="Toggle menu">☰</button>
+        <div><p class="eyebrow" id="page-eyebrow">MARKET COMMAND CENTER</p><h1 id="page-title">Overview</h1></div>
+        <div class="top-actions"><span class="status-pill"><i class="live-dot"></i><span id="feed-status">Syncing</span></span><button class="button secondary" id="refresh-button">↻ Refresh feed</button></div>
       </header>
-      <div id="content">
-        <!-- Dashboard -->
-        <div id="tab-dashboard" class="tab-content active">
-          <div class="stat-grid" id="stats-grid"></div>
-          <div class="two-col">
-            <div class="section">
-              <div class="section-head"><span class="section-title">Top Flip Opportunities</span></div>
-              <div class="data-list" id="dash-top-flips"></div>
-            </div>
-            <div class="section">
-              <div class="section-head"><span class="section-title">Most Listed Items</span></div>
-              <div class="data-list" id="dash-top-listed"></div>
-            </div>
-          </div>
-          <div class="two-col">
-            <div class="section">
-              <div class="section-head"><span class="section-title">Rising Prices</span></div>
-              <div class="data-list" id="dash-rising"></div>
-            </div>
-            <div class="section">
-              <div class="section-head"><span class="section-title">Falling Prices</span></div>
-              <div class="data-list" id="dash-falling"></div>
-            </div>
-          </div>
-        </div>
-        <!-- Flips -->
-        <div id="tab-flips" class="tab-content">
-          <div class="search-bar">
-            <input type="text" class="form-input" id="flip-search" placeholder="Filter flips...">
-            <select class="form-select" id="flip-type-filter">
-              <option value="">All Types</option>
-              <option value="craft">Craft</option>
-              <option value="market">Market</option>
-              <option value="snipe">Snipe</option>
-            </select>
-            <select class="form-select" id="flip-profit-filter">
-              <option value="0">Any Profit</option>
-              <option value="10000">10K+</option>
-              <option value="50000">50K+</option>
-              <option value="100000">100K+</option>
-              <option value="500000">500K+</option>
-              <option value="1000000">1M+</option>
-            </select>
-          </div>
-          <div class="flip-grid" id="flips-grid"></div>
-        </div>
-        <!-- Portfolio -->
-        <div id="tab-portfolio" class="tab-content">
-          <div class="search-bar">
-            <input type="text" class="form-input" id="portfolio-budget" placeholder="Investment budget" value="5000000">
-            <button class="btn btn-primary" onclick="calculatePortfolio()">Calculate</button>
-          </div>
-          <div id="portfolio-results"></div>
-        </div>
-        <!-- Auctions -->
-        <div id="tab-auctions" class="tab-content">
-          <div class="search-bar">
-            <input type="text" class="form-input" id="auction-search" placeholder="Search items...">
-            <button class="btn btn-ghost" onclick="loadAuctions()">Search</button>
-          </div>
-          <div class="table-wrap">
-            <table class="data-table">
-              <thead><tr><th>Item</th><th>Count</th><th>Price</th><th>$/Unit</th><th>Seller</th><th>Time Left</th></tr></thead>
-              <tbody id="auctions-body"></tbody>
-            </table>
-          </div>
-          <div class="pagination" id="auctions-pagination"></div>
-        </div>
-        <!-- Transactions -->
-        <div id="tab-transactions" class="tab-content">
-          <div class="table-wrap">
-            <table class="data-table">
-              <thead><tr><th>Item</th><th>Count</th><th>Price</th><th>Seller</th><th>Date</th></tr></thead>
-              <tbody id="tx-body"></tbody>
-            </table>
-          </div>
-          <div class="pagination" id="tx-pagination"></div>
-        </div>
-        <!-- Leaderboards -->
-        <div id="tab-leaderboards" class="tab-content">
-          <div class="search-bar">
-            <select class="form-select" id="lb-type">
-              <option value="money">Money</option>
-              <option value="shards">Shards</option>
-              <option value="sell">Sell</option>
-              <option value="shop">Shop</option>
-              <option value="brokenblocks">Blocks Broken</option>
-              <option value="mobskilled">Mobs Killed</option>
-              <option value="kills">Player Kills</option>
-              <option value="deaths">Deaths</option>
-              <option value="placedblocks">Blocks Placed</option>
-              <option value="playtime">Playtime</option>
-            </select>
-            <button class="btn btn-primary" onclick="loadLeaderboard()">Load</button>
-          </div>
-          <div class="table-wrap">
-            <table class="data-table">
-              <thead><tr><th>#</th><th>Player</th><th>Value</th></tr></thead>
-              <tbody id="lb-body"></tbody>
-            </table>
-          </div>
-        </div>
-        <!-- Player -->
-        <div id="tab-player" class="tab-content">
-          <div class="search-bar">
-            <input type="text" class="form-input" id="player-search" placeholder="Player name...">
-            <button class="btn btn-primary" onclick="lookupPlayer()">Search</button>
-          </div>
-          <div id="player-results"></div>
-        </div>
-        <!-- AI -->
-        <div id="tab-ai" class="tab-content">
-          <div class="ai-output" id="ai-output"><div class="empty-state">Click "Run Analysis" to get AI market insights</div></div>
-          <div style="display:flex;gap:8px;margin-top:12px">
-            <button class="btn btn-primary" onclick="runAI()">Run Analysis</button>
-            <button class="btn btn-ghost" onclick="clearAI()">Clear</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
 
+      <section id="view-overview" class="view active">
+        <div class="hero-panel">
+          <div><span class="kicker">Live market brief</span><h2>Trade on signal,<br><span>not speculation.</span></h2><p>Sale-backed pricing, liquidity scoring and risk-adjusted opportunities from the DonutSMP economy.</p></div>
+          <div class="hero-signal"><div class="signal-orbit"><span id="hero-score">—</span><small>signals</small></div><p id="hero-caption">Analyzing the current market</p></div>
+        </div>
+        <div class="metric-grid" id="metric-grid"></div>
+        <div class="dashboard-grid">
+          <article class="panel span-2"><div class="panel-head"><div><span class="kicker">Ranked by confidence</span><h3>Best opportunities</h3></div><button class="text-button" data-go="opportunities">View all →</button></div><div id="top-flips" class="opportunity-list loading-block"></div></article>
+          <article class="panel"><div class="panel-head"><div><span class="kicker">Recent transactions</span><h3>Market pulse</h3></div></div><div id="active-market" class="compact-list loading-block"></div></article>
+          <article class="panel"><div class="panel-head"><div><span class="kicker">Price movement</span><h3>Movers</h3></div></div><div id="movers" class="compact-list loading-block"></div></article>
+          <article class="panel span-2"><div class="panel-head"><div><span class="kicker">Coverage & provenance</span><h3>Data health</h3></div></div><div id="data-health" class="health-grid"></div></article>
+        </div>
+      </section>
+
+      <section id="view-opportunities" class="view">
+        <div class="section-intro"><div><span class="kicker">Execution-ready</span><h2>Opportunity scanner</h2><p>Every estimate includes auction tax, observed sales and a confidence-aware risk score.</p></div></div>
+        <div class="toolbar"><label class="search-field">⌕<input id="flip-search" placeholder="Search an item"></label><select id="flip-type"><option value="">All strategies</option><option value="snipe">Snipes</option><option value="craft">Crafting</option><option value="order">Orders arbitrage</option></select><select id="flip-profit"><option value="0">Any profit</option><option value="10000">10K+ profit</option><option value="100000">100K+ profit</option><option value="1000000">1M+ profit</option></select></div>
+        <div id="flip-grid" class="cards-grid"></div>
+      </section>
+
+      <section id="view-market" class="view">
+        <div class="section-intro"><div><span class="kicker">Fair value discovery</span><h2>Market explorer</h2><p>Compare current floor price against median realized sales and available liquidity.</p></div></div>
+        <div class="toolbar"><label class="search-field">⌕<input id="market-search" placeholder="Search the market"></label><select id="market-sort"><option value="salesValue">Highest turnover</option><option value="sales">Most sales</option><option value="listings">Most listings</option><option value="floor">Highest floor</option><option value="change">Biggest mover</option></select></div>
+        <div class="table-panel"><table><thead><tr><th>Asset</th><th>Floor</th><th>Fair value</th><th>24/7d sales*</th><th>Turnover</th><th>Momentum</th><th>Confidence</th></tr></thead><tbody id="market-body"></tbody></table><div class="table-note">* Window reflects the transaction pages available from the configured data source.</div></div>
+      </section>
+
+      <section id="view-sales" class="view">
+        <div class="section-intro"><div><span class="kicker">Proof of price</span><h2>Sales ledger</h2><p>Observed completed transactions—not asking prices.</p></div></div>
+        <div class="toolbar"><label class="search-field">⌕<input id="sales-search" placeholder="Filter completed sales"></label></div>
+        <div class="table-panel"><table><thead><tr><th>Asset</th><th>Stack</th><th>Total</th><th>Unit price</th><th>Seller</th><th>Sold</th></tr></thead><tbody id="sales-body"></tbody></table><div id="sales-pagination" class="pagination"></div></div>
+      </section>
+
+      <section id="view-portfolio" class="view">
+        <div class="section-intro"><div><span class="kicker">Capital allocation</span><h2>Portfolio lab</h2><p>Build a diversified basket with per-position caps and risk controls.</p></div></div>
+        <div class="lab-controls"><label>Available capital<input id="budget" type="number" min="1000" value="5000000"></label><label>Risk ceiling <b id="risk-value">55</b><input id="risk" type="range" min="10" max="95" value="55"></label><button class="button primary" id="calculate-button">Build portfolio</button></div>
+        <div id="portfolio-results"></div>
+      </section>
+
+      <section id="view-players" class="view">
+        <div class="section-intro"><div><span class="kicker">Public server data</span><h2>Player intelligence</h2><p>Look up a DonutSMP username and inspect its public economy and activity profile.</p></div></div>
+        <form class="player-search" id="player-form"><input id="player-name" placeholder="Enter Minecraft username" maxlength="36" required><button class="button primary">Look up player</button></form>
+        <div id="player-results" class="player-results empty-message">Search for a player to begin.</div>
+      </section>
+    </main>
+  </div>
+  <div class="toast-region" id="toast-region" aria-live="polite"></div>
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/app.js"></script>
 </body>

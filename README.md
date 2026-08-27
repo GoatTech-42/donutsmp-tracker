@@ -1,58 +1,71 @@
-# DonutSMP Tracker
+# Pulse — DonutSMP Market Intelligence
 
-DonutSMP auction tracker with AI market analyst powered by Groq.
+Pulse is a working market research dashboard for DonutSMP. It combines active auctions with completed sales to estimate fair value, rank risk-adjusted flips, monitor liquidity, and allocate a trading budget.
 
-## Features
+## What changed in 2.0
 
-- Live auction house scanning (items, prices, sellers, time left)
-- Transaction history tracking
-- 10 leaderboards (money, shards, kills, playtime, etc.)
-- Player lookup with full stats
-- Cross-market arbitrage detection (/orders vs /ah)
-- AI market analysis with Groq (auto-runs every 5 minutes)
-- AI chat for custom market questions
-- Shield config/metrics/stats viewer
-- Compact number formatting (1k, 1M, etc.)
-- Markdown-rendered AI output with tables, lists, and code blocks
+- Sale-backed fair values instead of using the highest active listing as a resale target
+- Correct stack, crafting-output, auction-tax, ROI, and risk calculations
+- Opportunity scanner for snipes, crafting spreads, and optional order arbitrage
+- Market explorer, completed-sales ledger, portfolio lab, and player lookup
+- Resilient upstream client with timeout, retry, pagination, validation, and no embedded secrets
+- Fully functional zero-config demo mode; add a DonutSMP key to switch to live data
+- Responsive, accessible product interface with real-time scan status
+- Built-in API and analytics tests
 
-## Setup
+## Run
 
 ```bash
-npm install
-DONUTSMP_API_KEY=your_key GROQ_API_KEY=your_key node server.js
+npm ci
+npm start
+# http://localhost:3001
 ```
 
-Dashboard runs on port 3001.
-
-## Docker
+Copy `.env.example` to `.env` or export values in your runtime. Create the official API key in-game with `/api`.
 
 ```bash
-docker build -t donutsmp-tracker .
-docker run -d -p 3001:3001 \
-  -e DONUTSMP_API_KEY=your_key \
-  -e GROQ_API_KEY=your_key \
-  donutsmp-tracker
+DONUTSMP_API_KEY=your_key npm start
 ```
+
+Without a key, Pulse intentionally starts with deterministic sample data so every workflow remains usable.
+
+## Orders data
+
+Research against the official Swagger specification at `https://api.donutsmp.net/doc.json` confirmed that the official public API exposes auction listings and transactions but **does not expose `/orders`**. Donut.Auction also states that its former order-listing API was retired. Pulse therefore does not scrape or misrepresent order data.
+
+A provider-neutral connector is included for a future authorized source:
+
+```bash
+DONUTSMP_ORDERS_API_URL=https://provider.example/orders
+DONUTSMP_ORDERS_API_KEY=optional_token
+```
+
+Accepted response shapes are an array, `{ "orders": [] }`, or `{ "result": [] }`. Rows may use `itemName`, `item_name`, or `name`, with `pricePerUnit`, `price_per_unit`, `unitPrice`, or `price`.
 
 ## API
 
-| Endpoint | Description |
+| Endpoint | Purpose |
 |---|---|
-| `GET /api/health` | Health check |
-| `GET /api/auction/list?page=&search=&sort=` | Auction house listings |
-| `GET /api/auction/transactions?page=` | Transaction history |
-| `GET /api/leaderboard/:type?page=` | Leaderboard data |
-| `GET /api/player/lookup/:user` | Player lookup |
-| `GET /api/player/stats/:user` | Player stats |
-| `GET /api/market/overview` | Market overview |
-| `GET /api/market/trends` | Price trends |
-| `POST /api/ai/analyze` | Trigger AI analysis |
-| `POST /api/ai/ask` | Ask AI a question |
+| `GET /api/health` | Feed and scanner health |
+| `GET /api/overview` | Summary, signals, movers, data provenance |
+| `GET /api/flips` | Filtered opportunity ranking |
+| `GET /api/market` | Searchable market aggregates |
+| `GET /api/market/:name` | Item listings, sales, and price history |
+| `GET /api/transactions` | Paginated completed sales |
+| `GET /api/orders` | Connector status and normalized orders |
+| `GET /api/portfolio` | Risk-capped allocation model |
+| `GET /api/leaderboards/:type` | Official leaderboard proxy |
+| `GET /api/player/:name` | Public player lookup and stats |
+| `POST /api/scan` | Trigger a refresh |
+| `POST /api/ai/analyze` | Optional Groq-backed research brief |
 
-## Stack
+## Quality checks
 
-- Node.js + Express + Socket.IO
-- DonutSMP API (`api.donutsmp.net`)
-- Groq AI (`openai/gpt-oss-120b`)
-- Marked.js (markdown rendering)
-- Vanilla HTML/CSS/JS frontend
+```bash
+npm test
+npm run check
+```
+
+## Data and risk disclaimer
+
+Pulse is an independent analytics tool and is not affiliated with DonutSMP. Prices can move before execution. Opportunity estimates are research signals, not guarantees; verify listings in-game before trading.
