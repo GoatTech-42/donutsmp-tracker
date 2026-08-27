@@ -1,389 +1,149 @@
-const socket = io();
-let currentTab = 'dashboard';
-let allFlips = [];
-let allAuctions = [];
-let allTransactions = [];
+const state = { overview: null, flips: [], market: [], salesPage: 1, view: 'overview' };
+const $ = selector => document.querySelector(selector);
+const $$ = selector => [...document.querySelectorAll(selector)];
+const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' })[char]);
+const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
+const number = new Intl.NumberFormat('en-US');
+const money = value => `$${compact.format(Number(value) || 0)}`;
+const relative = value => {
+  if (!value) return '—';
+  const seconds = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 1000));
+  if (seconds < 60) return `${seconds}s ago`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
+};
 
-// === UTILS ===
-function fmt(n) {
-  if (n === null || n === undefined) return '-';
-  if (n >= 1e15) return (n/1e15).toFixed(1)+'Q';
-  if (n >= 1e12) return (n/1e12).toFixed(1)+'T';
-  if (n >= 1e9) return (n/1e9).toFixed(1)+'B';
-  if (n >= 1e6) return (n/1e6).toFixed(1)+'M';
-  if (n >= 1e3) return (n/1e3).toFixed(1)+'K';
-  return n.toLocaleString();
+async function request(url, options) {
+  const response = await fetch(url, options);
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || `Request failed (${response.status})`);
+  return payload;
+}
+function toast(message, error = false) {
+  const node = document.createElement('div');
+  node.className = `toast${error ? ' error' : ''}`;
+  node.textContent = message;
+  $('#toast-region').append(node);
+  setTimeout(() => node.remove(), 3800);
 }
 
-function fmtPrice(n) {
-  if (n === null || n === undefined) return '-';
-  return '$' + fmt(n);
+const titles = { overview:['MARKET COMMAND CENTER','Overview'], opportunities:['ACTIONABLE SIGNALS','Opportunities'], market:['PRICE DISCOVERY','Market explorer'], sales:['COMPLETED TRADES','Sales ledger'], portfolio:['RISK-ADJUSTED ALLOCATION','Portfolio lab'], players:['PUBLIC PLAYER DATA','Player lookup'] };
+function navigate(view) {
+  state.view = view;
+  $$('.view').forEach(node => node.classList.toggle('active', node.id === `view-${view}`));
+  $$('.nav-link').forEach(node => node.classList.toggle('active', node.dataset.view === view));
+  $('#page-eyebrow').textContent = titles[view][0];
+  $('#page-title').textContent = titles[view][1];
+  $('#sidebar').classList.remove('open');
+  history.replaceState(null, '', `#${view}`);
+  if (view === 'opportunities') loadFlips();
+  if (view === 'market') loadMarket();
+  if (view === 'sales') loadSales();
+}
+$$('.nav-link').forEach(node => node.addEventListener('click', () => navigate(node.dataset.view)));
+$$('[data-go]').forEach(node => node.addEventListener('click', () => navigate(node.dataset.go)));
+$('#menu-button').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
+
+function renderStatus(status) {
+  $('#source-label').textContent = status.demo ? 'Demo feed' : 'Official API';
+  $('#source-note').textContent = status.demo ? 'Safe sample data. Add DONUTSMP_API_KEY for the official live feed.' : status.ordersConfigured ? 'Official auctions plus a configured orders provider.' : 'Official auction and transaction data. Orders API unavailable.';
+  $('#scan-count').textContent = `Scan #${status.scanCount}`;
+  $('#last-scan').textContent = relative(status.lastSuccess);
+  $('#feed-status').textContent = status.scanning ? 'Scanning' : status.lastError ? 'Degraded' : status.demo ? 'Demo live' : 'Live';
 }
 
-function timeAgo(ms) {
-  if (!ms) return '-';
-  const s = Math.floor(ms / 1000);
-  if (s < 60) return s + 's';
-  if (s < 3600) return Math.floor(s/60) + 'm';
-  if (s < 86400) return Math.floor(s/3600) + 'h';
-  return Math.floor(s/86400) + 'd';
-}
-
-function riskBadge(risk) {
-  if (!risk) return '';
-  const cls = risk.score < 30 ? 'pill-green' : risk.score > 70 ? 'pill-red' : 'pill-yellow';
-  return `<span class="pill ${cls}">${risk.label} risk</span>`;
-}
-
-function typeBadge(type) {
-  const colors = { craft: 'pill-blue', market: 'pill-purple', snipe: 'pill-green' };
-  return `<span class="pill ${colors[type] || 'pill-accent'}">${type}</span>`;
-}
-
-function profitClass(n) { return n > 0 ? 'pos' : n < 0 ? 'neg' : ''; }
-
-// === NAV ===
-document.querySelectorAll('.nav-item').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-    btn.classList.add('active');
-    const tab = btn.dataset.tab;
-    currentTab = tab;
-    document.getElementById('tab-' + tab).classList.add('active');
-    document.getElementById('page-title').textContent = btn.dataset.title || tab;
-    if (tab === 'dashboard') loadDashboard();
-    if (tab === 'flips') loadFlips();
-    if (tab === 'auctions') loadAuctions();
-    if (tab === 'transactions') loadTransactions();
-    if (tab === 'leaderboards') loadLeaderboard();
-  });
-});
-
-// === DASHBOARD ===
-async function loadDashboard() {
+async function loadOverview() {
   try {
-    const res = await fetch('/api/intelligence');
-    const data = await res.json();
-    renderDashboardStats(data.summary);
-    renderTopFlips(data.topFlips);
-    renderTopListed(data.topListed);
-    renderRisingFalling(data.risingItems, data.fallingItems);
-    document.getElementById('flip-count').textContent = data.summary.profitableFlips;
-  } catch (e) { console.error('Dashboard error:', e); }
+    const data = await request('/api/overview');
+    state.overview = data;
+    renderStatus(data.status);
+    const s = data.summary;
+    $('#hero-score').textContent = s.opportunities;
+    $('#hero-caption').textContent = `${s.recordedSales} completed sales inform fair value`;
+    $('#nav-opportunities').textContent = s.opportunities;
+    $('#metric-grid').innerHTML = [
+      ['Market value', money(s.marketValue), `${number.format(s.totalAuctions)} live listings`],
+      ['Recorded turnover', money(s.salesValue), `${number.format(s.recordedSales)} completed sales`],
+      ['Unique assets', number.format(s.uniqueItems), 'Normalized item markets'],
+      ['Orders observed', number.format(s.orderListings), data.status.ordersConfigured ? 'External provider connected' : 'No public source available']
+    ].map(x => `<div class="metric-card"><span class="label">${x[0]}</span><strong>${x[1]}</strong><small>${x[2]}</small></div>`).join('');
+    $('#top-flips').classList.remove('loading-block');
+    $('#top-flips').innerHTML = data.topFlips.length ? data.topFlips.map(f => `<button class="opportunity-row text-button" data-open-flips="${escapeHtml(f.name)}"><div><div class="asset-name">${escapeHtml(f.name)}</div><span class="strategy">${f.type} · ${f.risk.label} risk</span></div><div><div class="profit">+${money(f.profit)}</div><div class="roi">${f.roi}% ROI</div></div></button>`).join('') : empty('No qualified opportunities yet.');
+    $$('[data-open-flips]').forEach(node => node.addEventListener('click', () => { navigate('opportunities'); $('#flip-search').value = node.dataset.openFlips; loadFlips(); }));
+    $('#active-market').classList.remove('loading-block');
+    $('#active-market').innerHTML = data.active.slice(0, 7).map(x => `<div class="compact-row"><span>${escapeHtml(x.name)}</span><b>${x.sales} sales</b><small>${money(x.salesValue)} turnover</small><small>${money(x.floor)} floor</small></div>`).join('') || empty('Waiting for sales data.');
+    $('#movers').classList.remove('loading-block');
+    $('#movers').innerHTML = data.movers.slice(0, 7).map(x => `<div class="compact-row"><span>${escapeHtml(x.name)}</span><b class="${x.change >= 0 ? 'up' : 'down'}">${x.change > 0 ? '+' : ''}${x.change}%</b><small>${money(x.floor)} floor</small><small>${x.confidence}% confidence</small></div>`).join('') || empty('More scans are needed for momentum.');
+    $('#data-health').innerHTML = `<div class="health-item"><b>${data.status.demo ? 'Demonstration mode' : 'Official DonutSMP API'}</b><span>${data.status.demo ? 'Fully functional sample dataset' : 'Authenticated live market feed'}</span></div><div class="health-item"><b>${data.status.ordersConfigured ? 'Orders connected' : 'Orders unavailable'}</b><span>${data.status.ordersConfigured ? `${s.orderListings} buy orders normalized` : 'Official API has no /orders endpoint'}</span></div><div class="health-item"><b>${relative(data.status.lastSuccess)}</b><span>Last successful snapshot</span></div>`;
+  } catch (error) { toast(error.message, true); }
 }
 
-function renderDashboardStats(s) {
-  document.getElementById('stats-grid').innerHTML = `
-    <div class="stat-card blue"><div class="stat-label">Auctions</div><div class="stat-value">${fmt(s.totalAuctions)}</div><div class="stat-sub">Total listings</div></div>
-    <div class="stat-card green"><div class="stat-label">Profitable Flips</div><div class="stat-value">${fmt(s.profitableFlips)}</div><div class="stat-sub">Found by scanner</div></div>
-    <div class="stat-card yellow"><div class="stat-label">Avg Flip Profit</div><div class="stat-value">${fmtPrice(s.avgFlipProfit)}</div><div class="stat-sub">Per flip</div></div>
-    <div class="stat-card red"><div class="stat-label">Market Value</div><div class="stat-value">${fmtPrice(s.totalAuctionValue)}</div><div class="stat-sub">Total listed value</div></div>
-  `;
-}
-
-function renderTopFlips(flips) {
-  const el = document.getElementById('dash-top-flips');
-  if (!flips || flips.length === 0) { el.innerHTML = '<div class="empty-state">No flips found yet</div>'; return; }
-  el.innerHTML = flips.slice(0, 10).map(f => `
-    <div class="data-row">
-      <span class="data-name">${typeBadge(f.type)} ${f.name}</span>
-      <span class="data-val ${profitClass(f.profit)}">${fmtPrice(f.profit)}</span>
-      <span class="data-val" style="color:var(--text3);min-width:55px;text-align:right">${f.roi > 0 ? '+'+f.roi.toFixed(1)+'%' : f.roi.toFixed(1)+'%'}</span>
-    </div>
-  `).join('');
-}
-
-function renderTopListed(items) {
-  const el = document.getElementById('dash-top-listed');
-  if (!items || items.length === 0) { el.innerHTML = '<div class="empty-state">No data yet</div>'; return; }
-  el.innerHTML = items.slice(0, 10).map(i => `
-    <div class="data-row">
-      <span class="data-name">${i.item}</span>
-      <span class="data-val">${i.count} listings</span>
-      <span class="data-val" style="color:var(--text3)">${fmtPrice(i.avgPrice)} avg</span>
-    </div>
-  `).join('');
-}
-
-function renderRisingFalling(rising, falling) {
-  const rEl = document.getElementById('dash-rising');
-  const fEl = document.getElementById('dash-falling');
-  if (rising && rising.length > 0) {
-    rEl.innerHTML = rising.map(i => `<div class="data-row"><span class="data-name">${i.item}</span><span class="data-val pos">+${i.change.toFixed(1)}%</span><span class="data-val" style="color:var(--text3)">${fmtPrice(i.recentAvg)}</span></div>`).join('');
-  } else { rEl.innerHTML = '<div class="empty-state">No rising items</div>'; }
-  if (falling && falling.length > 0) {
-    fEl.innerHTML = falling.map(i => `<div class="data-row"><span class="data-name">${i.item}</span><span class="data-val neg">${i.change.toFixed(1)}%</span><span class="data-val" style="color:var(--text3)">${fmtPrice(i.recentAvg)}</span></div>`).join('');
-  } else { fEl.innerHTML = '<div class="empty-state">No falling items</div>'; }
-}
-
-// === FLIPS ===
 async function loadFlips() {
+  const params = new URLSearchParams({ search: $('#flip-search').value, type: $('#flip-type').value, minProfit: $('#flip-profit').value });
   try {
-    const type = document.getElementById('flip-type-filter').value;
-    const minProfit = document.getElementById('flip-profit-filter').value;
-    let url = '/api/flips?minProfit=' + minProfit;
-    if (type) url += '&type=' + type;
-    const res = await fetch(url);
-    const data = await res.json();
-    allFlips = data.flips;
-    renderFlips(allFlips);
-  } catch (e) { console.error('Flips error:', e); }
+    const data = await request(`/api/flips?${params}`);
+    state.flips = data.flips;
+    $('#flip-grid').innerHTML = data.flips.length ? data.flips.map(f => `<article class="flip-card"><div class="flip-top"><div><h3>${escapeHtml(f.name)}</h3><div style="margin-top:7px"><span class="badge">${f.type}</span> <span class="badge risk-${f.risk.label.toLowerCase()}">${f.risk.label} risk</span></div></div><div><div class="flip-profit">+${money(f.profit)}</div><div class="roi">${f.roi}% ROI</div></div></div><div class="flip-route"><div><small>Acquire</small><b>${money(f.buyPrice)}</b></div><i>→</i><div><small>Target</small><b>${money(f.sellPrice)}</b></div></div><div class="flip-meta"><span>${f.volume} observed sales</span><span>${f.confidence}% confidence</span><span>Score ${compact.format(f.score)}</span></div></article>`).join('') : empty('No opportunities match these filters.');
+  } catch (error) { toast(error.message, true); }
 }
 
-function renderFlips(flips) {
-  const search = document.getElementById('flip-search').value.toLowerCase();
-  let filtered = flips;
-  if (search) filtered = flips.filter(f => f.name.toLowerCase().includes(search));
-
-  const grid = document.getElementById('flips-grid');
-  if (filtered.length === 0) { grid.innerHTML = '<div class="empty-state">No flips match your filters</div>'; return; }
-
-  grid.innerHTML = filtered.map(f => {
-    let stepsHtml = '';
-    if (f.type === 'craft' && f.ingredients) {
-      stepsHtml = f.ingredients.map((ing, i) =>
-        `<div class="flip-step"><span class="flip-step-num buy">${i+1}</span> Buy ${ing.count}x ${ing.name} @ ${fmtPrice(ing.unitPrice)}</div>`
-      ).join('') + `<div class="flip-step"><span class="flip-step-num sell">→</span> Craft & sell ${f.name} @ ${fmtPrice(f.sellPrice)}</div>`;
-    } else if (f.type === 'market') {
-      stepsHtml = `
-        <div class="flip-step"><span class="flip-step-num buy">1</span> Buy ${f.name} @ ${fmtPrice(f.buyPrice)}</div>
-        <div class="flip-step"><span class="flip-step-num sell">2</span> Relist @ ${fmtPrice(f.sellPrice)}</div>
-      `;
-    } else if (f.type === 'snipe') {
-      stepsHtml = `
-        <div class="flip-step"><span class="flip-step-num buy">1</span> Snipe ${f.name} @ ${fmtPrice(f.buyPrice)}</div>
-        <div class="flip-step"><span class="flip-step-num sell">2</span> Sell @ market ~${fmtPrice(f.sellPrice)}</div>
-      `;
-    }
-
-    return `
-      <div class="flip-card">
-        <div class="flip-header">
-          <div><div class="flip-title">${f.name}</div><div style="margin-top:4px">${typeBadge(f.type)} ${riskBadge(f.risk)} <span class="pill pill-accent">${f.volume || 0} listed</span></div></div>
-          <div class="flip-profit ${f.profit > 0 ? '' : 'negative'}">${fmtPrice(f.profit)}</div>
-        </div>
-        <div class="flip-steps">${stepsHtml}</div>
-        <div class="flip-meta">
-          <span class="pill pill-blue">Cost: ${fmtPrice(f.totalCost || f.buyPrice)}</span>
-          <span class="pill pill-green">ROI: ${f.roi > 0 ? '+' : ''}${f.roi.toFixed(1)}%</span>
-        </div>
-      </div>
-    `;
-  }).join('');
+async function loadMarket() {
+  const params = new URLSearchParams({ search: $('#market-search').value, sort: $('#market-sort').value, limit: 100 });
+  try {
+    const data = await request(`/api/market?${params}`);
+    state.market = data.items;
+    $('#market-body').innerHTML = data.items.map(x => `<tr><td class="asset">${escapeHtml(x.name)}</td><td class="mono">${money(x.floor)}</td><td class="mono">${money(x.fairValue)}</td><td>${x.sales}</td><td class="mono">${money(x.salesValue)}</td><td class="${x.change >= 0 ? 'up' : 'down'}">${x.change > 0 ? '+' : ''}${x.change}%</td><td><div class="confidence" title="${x.confidence}% confidence"><i style="width:${x.confidence}%"></i></div></td></tr>`).join('') || `<tr><td colspan="7">No matching assets.</td></tr>`;
+  } catch (error) { toast(error.message, true); }
 }
 
-document.getElementById('flip-search').addEventListener('input', () => renderFlips(allFlips));
-document.getElementById('flip-type-filter').addEventListener('change', loadFlips);
-document.getElementById('flip-profit-filter').addEventListener('change', loadFlips);
+async function loadSales(page = 1) {
+  state.salesPage = page;
+  const params = new URLSearchParams({ search: $('#sales-search').value, page, limit: 40 });
+  try {
+    const data = await request(`/api/transactions?${params}`);
+    $('#sales-body').innerHTML = data.transactions.map(x => `<tr><td class="asset">${escapeHtml(x.itemName)}</td><td>${number.format(x.count)}×</td><td class="mono">${money(x.price)}</td><td class="mono">${money(x.pricePerUnit)}</td><td>${escapeHtml(x.seller?.name || 'Unknown')}</td><td>${relative(x.dateSold)}</td></tr>`).join('') || `<tr><td colspan="6">No completed sales found.</td></tr>`;
+    $('#sales-pagination').innerHTML = `${data.page > 1 ? '<button data-page="prev">← Previous</button>' : ''}<span>Page ${data.page} of ${data.pages}</span>${data.page < data.pages ? '<button data-page="next">Next →</button>' : ''}`;
+    $$('[data-page]').forEach(node => node.addEventListener('click', () => loadSales(node.dataset.page === 'prev' ? data.page - 1 : data.page + 1)));
+  } catch (error) { toast(error.message, true); }
+}
 
-// === PORTFOLIO ===
 async function calculatePortfolio() {
-  const budget = parseInt(document.getElementById('portfolio-budget').value) || 5000000;
+  const button = $('#calculate-button'); button.disabled = true;
   try {
-    const res = await fetch('/api/portfolio?budget=' + budget);
-    const data = await res.json();
-    renderPortfolio(data);
-  } catch (e) { console.error('Portfolio error:', e); }
+    const data = await request(`/api/portfolio?budget=${encodeURIComponent($('#budget').value)}&risk=${$('#risk').value}`);
+    $('#portfolio-results').innerHTML = `<div class="portfolio-summary">${[['Deployed',money(data.totalCost)],['Expected profit',money(data.totalProfit)],['Projected ROI',`${data.totalROI}%`],['Cash reserve',money(data.remaining)]].map(x => `<div class="metric-card"><span class="label">${x[0]}</span><strong>${x[1]}</strong></div>`).join('')}</div><div class="allocation">${data.allocation.map(x => `<div class="allocation-row"><div><small>Asset</small><b>${escapeHtml(x.flip.name)}</b></div><div><small>Strategy</small><b>${x.flip.type}</b></div><div><small>Units</small><b>${x.copies}</b></div><div><small>Capital</small><b>${money(x.totalCost)}</b></div><div><small>Profit</small><b class="up">+${money(x.expectedProfit)}</b></div></div>`).join('') || empty('No opportunities fit this capital and risk profile.')}</div>`;
+  } catch (error) { toast(error.message, true); } finally { button.disabled = false; }
 }
 
-function renderPortfolio(p) {
-  const el = document.getElementById('portfolio-results');
-  if (p.allocation.length === 0) { el.innerHTML = '<div class="empty-state">No profitable flips found for this budget</div>'; return; }
-  el.innerHTML = `
-    <div class="stat-grid">
-      <div class="stat-card blue"><div class="stat-label">Investment</div><div class="stat-value">${fmtPrice(p.investment)}</div></div>
-      <div class="stat-card green"><div class="stat-label">Expected Profit</div><div class="stat-value">${fmtPrice(p.totalProfit)}</div></div>
-      <div class="stat-card yellow"><div class="stat-label">Total ROI</div><div class="stat-value">${p.totalROI}%</div></div>
-      <div class="stat-card red"><div class="stat-label">Flips Used</div><div class="stat-value">${p.flipCount}</div><div class="stat-sub">${fmtPrice(p.remaining)} remaining</div></div>
-    </div>
-    <div class="table-wrap">
-      <table class="data-table">
-        <thead><tr><th>Item</th><th>Type</th><th>Copies</th><th>Cost</th><th>Expected Profit</th><th>ROI</th></tr></thead>
-        <tbody>
-          ${p.allocation.map(a => `
-            <tr>
-              <td class="item-name">${a.flip.name}</td>
-              <td>${typeBadge(a.flip.type)}</td>
-              <td>${a.copies}</td>
-              <td class="price">${fmtPrice(a.totalCost)}</td>
-              <td class="price ${profitClass(a.expectedProfit)}">${fmtPrice(a.expectedProfit)}</td>
-              <td class="price">${a.expectedROI > 0 ? '+' : ''}${a.expectedROI.toFixed(1)}%</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>
-  `;
-}
-
-// === AUCTIONS ===
-let auctionPage = 1;
-async function loadAuctions(page) {
-  auctionPage = page || 1;
-  const search = document.getElementById('auction-search').value;
+async function lookupPlayer(event) {
+  event.preventDefault();
+  const name = $('#player-name').value.trim();
+  $('#player-results').textContent = 'Loading player profile…';
   try {
-    const res = await fetch(`/api/auctions?page=${auctionPage}&search=${encodeURIComponent(search)}`);
-    const data = await res.json();
-    allAuctions = data.auctions;
-    renderAuctions(data);
-  } catch (e) { console.error('Auctions error:', e); }
+    const data = await request(`/api/player/${encodeURIComponent(name)}`);
+    const profile = data.lookup?.result || data.lookup || {};
+    const stats = data.stats?.result || data.stats || {};
+    const safeStats = Object.entries(stats).filter(([key, value]) => key !== 'demo' && ['string','number'].includes(typeof value));
+    $('#player-results').innerHTML = `<div class="player-header"><div class="player-avatar">${escapeHtml((profile.name || name).slice(0, 1).toUpperCase())}</div><div><h3>${escapeHtml(profile.name || name)}</h3><p>${escapeHtml(profile.uuid || 'Public DonutSMP profile')} · ${data.source} data</p></div></div><div class="player-stat-grid">${safeStats.map(([key,value]) => `<div class="player-stat"><small>${escapeHtml(key.replaceAll('_',' '))}</small><b>${typeof value === 'number' ? compact.format(value) : escapeHtml(value)}</b></div>`).join('')}</div>`;
+  } catch (error) { $('#player-results').textContent = error.message; toast(error.message, true); }
 }
 
-function renderAuctions(data) {
-  const body = document.getElementById('auctions-body');
-  body.innerHTML = data.auctions.map(a => `
-    <tr>
-      <td class="item-name">${a.itemName}</td>
-      <td>${a.count}</td>
-      <td class="price">${fmtPrice(a.price)}</td>
-      <td class="price">${fmtPrice(a.pricePerUnit)}</td>
-      <td>${a.seller?.name || '-'}</td>
-      <td>${timeAgo(a.timeLeft)}</td>
-    </tr>
-  `).join('');
-  renderPagination('auctions-pagination', data.page, data.pages, loadAuctions);
-}
+function empty(message) { return `<div class="empty-message">${escapeHtml(message)}</div>`; }
+function debounce(fn, delay = 250) { let timer; return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), delay); }; }
+$('#flip-search').addEventListener('input', debounce(loadFlips));
+$('#flip-type').addEventListener('change', loadFlips); $('#flip-profit').addEventListener('change', loadFlips);
+$('#market-search').addEventListener('input', debounce(loadMarket)); $('#market-sort').addEventListener('change', loadMarket);
+$('#sales-search').addEventListener('input', debounce(() => loadSales(1)));
+$('#risk').addEventListener('input', event => $('#risk-value').textContent = event.target.value);
+$('#calculate-button').addEventListener('click', calculatePortfolio); $('#player-form').addEventListener('submit', lookupPlayer);
+$('#refresh-button').addEventListener('click', async () => { const button = $('#refresh-button'); button.disabled = true; try { await request('/api/scan', { method:'POST' }); await loadOverview(); toast('Market feed refreshed'); } catch (error) { toast(error.message, true); } finally { button.disabled = false; } });
 
-document.getElementById('auction-search').addEventListener('keydown', e => { if (e.key === 'Enter') loadAuctions(); });
+const socket = io();
+socket.on('scan:status', renderStatus);
+socket.on('scan:update', status => { renderStatus(status); if (state.view === 'overview') loadOverview(); });
+socket.on('connect_error', () => $('#feed-status').textContent = 'Reconnecting');
 
-// === TRANSACTIONS ===
-let txPage = 1;
-async function loadTransactions(page) {
-  txPage = page || 1;
-  try {
-    const res = await fetch(`/api/transactions?page=${txPage}`);
-    const data = await res.json();
-    allTransactions = data.transactions;
-    renderTransactions(data);
-  } catch (e) { console.error('Transactions error:', e); }
-}
-
-function renderTransactions(data) {
-  const body = document.getElementById('tx-body');
-  body.innerHTML = data.transactions.map(t => `
-    <tr>
-      <td class="item-name">${t.itemName}</td>
-      <td>${t.count}</td>
-      <td class="price">${fmtPrice(t.price)}</td>
-      <td>${t.seller?.name || '-'}</td>
-      <td>${t.dateSold ? new Date(t.dateSold).toLocaleDateString() : '-'}</td>
-    </tr>
-  `).join('');
-  renderPagination('tx-pagination', data.page, data.pages, loadTransactions);
-}
-
-// === LEADERBOARDS ===
-async function loadLeaderboard() {
-  const type = document.getElementById('lb-type').value;
-  try {
-    const res = await fetch(`/api/leaderboards/${type}`);
-    const data = await res.json();
-    const body = document.getElementById('lb-body');
-    body.innerHTML = (data.result || []).map((p, i) => `
-      <tr>
-        <td>${i + 1}</td>
-        <td class="item-name">${p.player || p.name || '-'}</td>
-        <td class="price">${fmt(p.value || p.score || 0)}</td>
-      </tr>
-    `).join('');
-  } catch (e) { console.error('Leaderboard error:', e); }
-}
-
-// === PLAYER ===
-async function lookupPlayer() {
-  const name = document.getElementById('player-search').value;
-  if (!name) return;
-  try {
-    const res = await fetch(`/api/player/${encodeURIComponent(name)}`);
-    const data = await res.json();
-    renderPlayer(data);
-  } catch (e) { console.error('Player error:', e); }
-}
-
-function renderPlayer(data) {
-  const el = document.getElementById('player-results');
-  const lookup = data.lookup?.result || data.lookup;
-  const stats = data.stats?.result || data.stats;
-  if (!lookup && !stats) { el.innerHTML = '<div class="empty-state">Player not found</div>'; return; }
-  el.innerHTML = `
-    <div class="player-card">
-      <div class="player-name">${lookup?.name || document.getElementById('player-search').value}</div>
-      <div class="player-meta">UUID: ${lookup?.uuid || '-'}</div>
-      <div class="player-stats">
-        ${stats ? Object.entries(stats).map(([k, v]) => `
-          <div class="player-stat"><div class="player-stat-label">${k.replace(/_/g,' ')}</div><div class="player-stat-value">${typeof v === 'number' ? fmt(v) : v}</div></div>
-        `).join('') : '<div class="empty-state">No stats available</div>'}
-      </div>
-    </div>
-  `;
-}
-
-document.getElementById('player-search').addEventListener('keydown', e => { if (e.key === 'Enter') lookupPlayer(); });
-
-// === AI ===
-async function runAI() {
-  const output = document.getElementById('ai-output');
-  output.innerHTML = '<div class="empty-state">Analyzing market data...</div>';
-  try {
-    const [intRes, flipRes] = await Promise.all([fetch('/api/intelligence'), fetch('/api/flips?minProfit=1000')]);
-    const intel = await intRes.json();
-    const flips = await flipRes.json();
-    const topFlips = (flips.flips || []).slice(0, 10).map(f => `${f.name}: ${f.type} flip, profit ${fmtPrice(f.profit)}, ROI ${f.roi.toFixed(1)}%, risk ${f.risk?.label || '?'}`).join('\n');
-    const rising = (intel.risingItems || []).slice(0, 5).map(i => `${i.item}: +${i.change.toFixed(1)}%`).join(', ');
-    const falling = (intel.fallingItems || []).slice(0, 5).map(i => `${i.item}: ${i.change.toFixed(1)}%`).join(', ');
-    const prompt = `Analyze this DonutSMP market data and give actionable trading advice:
-Auctions: ${intel.summary.totalAuctions}, Total value: ${fmtPrice(intel.summary.totalAuctionValue)}
-Profitable flips found: ${intel.summary.profitableFlips}, Avg profit: ${fmtPrice(intel.summary.avgFlipProfit)}
-Top flips: ${topFlips || 'None'}
-Rising: ${rising || 'None'}
-Falling: ${falling || 'None'}
-Give specific advice on what to flip, buy, or sell. Format as markdown.`;
-    const aiRes = await fetch('/api/ai/analyze', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt })
-    });
-    const aiData = await aiRes.json();
-    if (aiData.error) { output.innerHTML = `<div class="empty-state">AI Error: ${aiData.error}</div>`; return; }
-    output.innerHTML = marked.parse(aiData.response || aiData.content || 'No response');
-  } catch (e) { output.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`; }
-}
-
-function clearAI() {
-  document.getElementById('ai-output').innerHTML = '<div class="empty-state">Click "Run Analysis" to get AI market insights</div>';
-}
-
-// === PAGINATION ===
-function renderPagination(id, current, total, callback) {
-  const el = document.getElementById(id);
-  if (total <= 1) { el.innerHTML = ''; return; }
-  let html = '';
-  if (current > 1) html += `<button onclick="window.${callback.name}(${current-1})">Prev</button>`;
-  for (let i = Math.max(1, current - 2); i <= Math.min(total, current + 2); i++) {
-    html += `<button class="${i === current ? 'active' : ''}" onclick="window.${callback.name}(${i})">${i}</button>`;
-  }
-  if (current < total) html += `<button onclick="window.${callback.name}(${current+1})">Next</button>`;
-  el.innerHTML = html;
-}
-
-// === SCAN ===
-async function triggerScan() {
-  try {
-    document.getElementById('tb-status').textContent = 'Scanning...';
-    await fetch('/api/scan', { method: 'POST' });
-    document.getElementById('tb-status').textContent = 'Live';
-    if (currentTab === 'dashboard') loadDashboard();
-    if (currentTab === 'flips') loadFlips();
-  } catch (e) { console.error('Scan error:', e); }
-}
-
-// === SOCKET ===
-socket.on('scan:update', (data) => {
-  document.getElementById('s-count').textContent = fmt(data.auctions);
-  document.getElementById('s-last').textContent = new Date(data.lastScan).toLocaleTimeString();
-  document.getElementById('s-status').textContent = 'Online';
-  document.getElementById('tb-scan').textContent = 'Scan #' + data.scanCount;
-});
-
-// === INIT ===
-loadDashboard();
+const initial = location.hash.slice(1);
+if (titles[initial]) navigate(initial); else navigate('overview');
+loadOverview();

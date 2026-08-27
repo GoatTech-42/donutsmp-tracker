@@ -1,14 +1,18 @@
 {
-  "name": "donutsmp-tracker",
-  "version": "1.0.0",
-  "description": "DonutSMP auction tracker & AI investment agent",
+  "name": "donutsmp-pulse",
+  "version": "2.0.0",
+  "description": "Sale-backed DonutSMP market intelligence and opportunity scanner",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "NODE_ENV=development node --watch server.js",
+    "test": "node --test",
+    "check": "node --check server.js && node --check lib/analyzer.js && node --check lib/donutsmp.js && node --check public/js/app.js"
   },
   "dependencies": {
     "express": "^4.21.0",
     "socket.io": "^4.8.0"
   },
-  "engines": { "node": ">=18.0.0" }
+  "engines": { "node": ">=18.0.0" },
+  "license": "MIT"
 }
