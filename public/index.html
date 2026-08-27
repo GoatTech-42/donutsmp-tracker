@@ -5,200 +5,196 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DonutSMP Tracker</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
   <div id="app">
     <aside id="sidebar">
       <div class="sidebar-brand">
         <div class="brand-icon">D</div>
-        <span class="brand-text">DonutSMP</span>
+        <span class="brand-text">DonutSMP Tracker</span>
       </div>
       <nav class="sidebar-nav">
+        <div class="nav-section">Analytics</div>
         <button class="nav-item active" data-tab="dashboard" data-title="Dashboard">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
           Dashboard
         </button>
+        <button class="nav-item" data-tab="flips" data-title="Flip Finder">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2h4v4H2zM10 2h4v4h-4zM6 6h4v4H6zM2 10h4v4H2zM10 10h4v4h-4z"/></svg>
+          Flip Finder
+          <span class="nav-badge" id="flip-count">0</span>
+        </button>
+        <button class="nav-item" data-tab="portfolio" data-title="Portfolio Optimizer">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2h12v2H2zm0 4h12v8H2z"/></svg>
+          Portfolio
+        </button>
+        <div class="nav-section">Market</div>
         <button class="nav-item" data-tab="auctions" data-title="Auction House">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2h12v3H2V2zm0 5h5v7H2V7zm7 0h5v7H9V7z"/></svg>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1L1 6v2h14V6L8 1zM3 10v3h10v-3H3z"/></svg>
           Auctions
         </button>
-        <button class="nav-item" data-tab="transactions" data-title="Transactions">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M1 3h14v2H1V3zm0 4h10v2H1V7zm0 4h14v2H1v-2z"/></svg>
+        <button class="nav-item" data-tab="transactions" data-title="Recent Sales">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1v14M1 8h14" stroke="currentColor" stroke-width="2" fill="none"/></svg>
           Transactions
         </button>
         <button class="nav-item" data-tab="leaderboards" data-title="Leaderboards">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4 10V4h2v6H4zm3 2V2h2v10H7zm3-4V6h2v2h-2z"/></svg>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2h8v4H4zM2 6h4v8H2zM10 6h4v8h-4z"/></svg>
           Leaderboards
         </button>
-        <button class="nav-item" data-tab="players" data-title="Players">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6H2z"/></svg>
+        <div class="nav-section">Tools</div>
+        <button class="nav-item" data-tab="player" data-title="Player Lookup">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
           Players
         </button>
         <button class="nav-item" data-tab="ai" data-title="AI Analyst">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l2 3h3l-2.5 2 1 3L8 7l-3.5 2 1-3L3 4h3l2-3z"/><path d="M3 12h10v2H3v-2z"/></svg>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="5.5" cy="6.5" r="1"/><circle cx="10.5" cy="6.5" r="1"/><path d="M5 10.5c.8 1 2.2 1.5 3 1.5s2.2-.5 3-1.5" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
           AI Analyst
-        </button>
-        <button class="nav-item" data-tab="shield" data-title="Shield">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1L2 4v4c0 3.3 2.6 6.4 6 7 3.4-.6 6-3.7 6-7V4L8 1z"/></svg>
-          Shield
         </button>
       </nav>
       <div class="sidebar-footer">
-        <div class="system-stats">
-          <div class="stat-row"><span>Items</span><span id="s-items">0</span></div>
-          <div class="stat-row"><span>Listings</span><span id="s-listings">0</span></div>
-          <div class="stat-row"><span>Scans</span><span id="s-scans">0</span></div>
+        <div class="footer-stats">
+          <div class="footer-row"><span>Scanner</span><span id="s-status">Starting...</span></div>
+          <div class="footer-row"><span>Last scan</span><span id="s-last">-</span></div>
+          <div class="footer-row"><span>Auctions</span><span id="s-count">0</span></div>
+          <div class="footer-row"><span>Tracked</span><span id="s-tracked">0</span></div>
         </div>
       </div>
     </aside>
 
-    <main id="main">
+    <div id="main">
       <header id="topbar">
         <div id="page-title">Dashboard</div>
-        <div class="topbar-actions" id="topbar-actions"></div>
+        <div class="topbar-right">
+          <div class="topbar-pill"><span class="dot"></span> <span id="tb-status">Live</span></div>
+          <div class="topbar-pill"><span id="tb-scan">Scan #0</span></div>
+          <button class="btn btn-primary btn-sm" onclick="triggerScan()">Scan Now</button>
+        </div>
       </header>
       <div id="content">
         <!-- Dashboard -->
-        <section id="tab-dashboard" class="tab-content active">
-          <div class="stat-grid">
-            <div class="stat-card accent"><div class="stat-label">Total Items</div><div class="stat-value" id="ov-items">0</div></div>
-            <div class="stat-card"><div class="stat-label">Total Listings</div><div class="stat-value" id="ov-listings">0</div></div>
-            <div class="stat-card positive"><div class="stat-label">Buy Signals</div><div class="stat-value" id="ov-buys">0</div></div>
-            <div class="stat-card negative"><div class="stat-label">Sell Signals</div><div class="stat-value" id="ov-sells">0</div></div>
+        <div id="tab-dashboard" class="tab-content active">
+          <div class="stat-grid" id="stats-grid"></div>
+          <div class="two-col">
+            <div class="section">
+              <div class="section-head"><span class="section-title">Top Flip Opportunities</span></div>
+              <div class="data-list" id="dash-top-flips"></div>
+            </div>
+            <div class="section">
+              <div class="section-head"><span class="section-title">Most Listed Items</span></div>
+              <div class="data-list" id="dash-top-listed"></div>
+            </div>
           </div>
           <div class="two-col">
             <div class="section">
-              <div class="section-head"><span class="section-title">Top Gainers</span></div>
-              <div class="card"><div class="data-list" id="dash-gainers"></div></div>
+              <div class="section-head"><span class="section-title">Rising Prices</span></div>
+              <div class="data-list" id="dash-rising"></div>
             </div>
             <div class="section">
-              <div class="section-head"><span class="section-title">Top Losers</span></div>
-              <div class="card"><div class="data-list" id="dash-losers"></div></div>
+              <div class="section-head"><span class="section-title">Falling Prices</span></div>
+              <div class="data-list" id="dash-falling"></div>
             </div>
           </div>
-          <div class="section">
-            <div class="section-head">
-              <span class="section-title">AI Market Analysis</span>
-              <span class="ai-timer" id="ai-last-run">auto every 5m</span>
-            </div>
-            <div class="ai-preview" id="dash-ai">Market analysis runs automatically every 5 minutes.</div>
-          </div>
-        </section>
-
-        <!-- Auctions -->
-        <section id="tab-auctions" class="tab-content">
+        </div>
+        <!-- Flips -->
+        <div id="tab-flips" class="tab-content">
           <div class="search-bar">
-            <input class="form-input" id="ah-search" placeholder="Search items...">
-            <select class="form-select" id="ah-sort">
-              <option value="">Default</option>
-              <option value="lowest_price">Lowest Price</option>
-              <option value="highest_price">Highest Price</option>
-              <option value="recently_listed">Recently Listed</option>
-              <option value="last_listed">Last Listed</option>
+            <input type="text" class="form-input" id="flip-search" placeholder="Filter flips...">
+            <select class="form-select" id="flip-type-filter">
+              <option value="">All Types</option>
+              <option value="craft">Craft</option>
+              <option value="market">Market</option>
+              <option value="snipe">Snipe</option>
             </select>
-            <button class="btn btn-primary" onclick="searchAuctions()">Search</button>
+            <select class="form-select" id="flip-profit-filter">
+              <option value="0">Any Profit</option>
+              <option value="10000">10K+</option>
+              <option value="50000">50K+</option>
+              <option value="100000">100K+</option>
+              <option value="500000">500K+</option>
+              <option value="1000000">1M+</option>
+            </select>
+          </div>
+          <div class="flip-grid" id="flips-grid"></div>
+        </div>
+        <!-- Portfolio -->
+        <div id="tab-portfolio" class="tab-content">
+          <div class="search-bar">
+            <input type="text" class="form-input" id="portfolio-budget" placeholder="Investment budget" value="5000000">
+            <button class="btn btn-primary" onclick="calculatePortfolio()">Calculate</button>
+          </div>
+          <div id="portfolio-results"></div>
+        </div>
+        <!-- Auctions -->
+        <div id="tab-auctions" class="tab-content">
+          <div class="search-bar">
+            <input type="text" class="form-input" id="auction-search" placeholder="Search items...">
+            <button class="btn btn-ghost" onclick="loadAuctions()">Search</button>
           </div>
           <div class="table-wrap">
-            <table class="data-table" id="ah-table">
-              <thead><tr><th>Item</th><th>Count</th><th>Price</th><th>Per Unit</th><th>Seller</th><th>Time Left</th></tr></thead>
-              <tbody id="ah-body"></tbody>
+            <table class="data-table">
+              <thead><tr><th>Item</th><th>Count</th><th>Price</th><th>$/Unit</th><th>Seller</th><th>Time Left</th></tr></thead>
+              <tbody id="auctions-body"></tbody>
             </table>
           </div>
-          <div class="pagination" id="ah-pagination"></div>
-        </section>
-
+          <div class="pagination" id="auctions-pagination"></div>
+        </div>
         <!-- Transactions -->
-        <section id="tab-transactions" class="tab-content">
+        <div id="tab-transactions" class="tab-content">
           <div class="table-wrap">
-            <table class="data-table" id="tx-table">
-              <thead><tr><th>Item</th><th>Count</th><th>Price</th><th>Seller</th><th>Date Sold</th></tr></thead>
+            <table class="data-table">
+              <thead><tr><th>Item</th><th>Count</th><th>Price</th><th>Seller</th><th>Date</th></tr></thead>
               <tbody id="tx-body"></tbody>
             </table>
           </div>
-        </section>
-
+          <div class="pagination" id="tx-pagination"></div>
+        </div>
         <!-- Leaderboards -->
-        <section id="tab-leaderboards" class="tab-content">
+        <div id="tab-leaderboards" class="tab-content">
           <div class="search-bar">
             <select class="form-select" id="lb-type">
               <option value="money">Money</option>
               <option value="shards">Shards</option>
               <option value="sell">Sell</option>
               <option value="shop">Shop</option>
-              <option value="playtime">Playtime</option>
-              <option value="kills">Kills</option>
-              <option value="deaths">Deaths</option>
-              <option value="mobskilled">Mobs Killed</option>
               <option value="brokenblocks">Blocks Broken</option>
+              <option value="mobskilled">Mobs Killed</option>
+              <option value="kills">Player Kills</option>
+              <option value="deaths">Deaths</option>
               <option value="placedblocks">Blocks Placed</option>
+              <option value="playtime">Playtime</option>
             </select>
             <button class="btn btn-primary" onclick="loadLeaderboard()">Load</button>
           </div>
           <div class="table-wrap">
-            <table class="data-table" id="lb-table">
+            <table class="data-table">
               <thead><tr><th>#</th><th>Player</th><th>Value</th></tr></thead>
               <tbody id="lb-body"></tbody>
             </table>
           </div>
-        </section>
-
-        <!-- Players -->
-        <section id="tab-players" class="tab-content">
+        </div>
+        <!-- Player -->
+        <div id="tab-player" class="tab-content">
           <div class="search-bar">
-            <input class="form-input" id="player-name" placeholder="Enter username..." value="goombakid7">
-            <button class="btn btn-primary" onclick="lookupPlayer()">Look Up</button>
+            <input type="text" class="form-input" id="player-search" placeholder="Player name...">
+            <button class="btn btn-primary" onclick="lookupPlayer()">Search</button>
           </div>
-          <div id="player-result"></div>
-        </section>
-
+          <div id="player-results"></div>
+        </div>
         <!-- AI -->
-        <section id="tab-ai" class="tab-content">
-          <div class="ai-controls">
-            <button class="btn btn-primary" onclick="runAIAnalysis()" id="ai-btn">Run Analysis</button>
-            <span class="pill pill-accent" id="ai-status-pill"><span class="dot dot-live"></span> Auto 5m</span>
+        <div id="tab-ai" class="tab-content">
+          <div class="ai-output" id="ai-output"><div class="empty-state">Click "Run Analysis" to get AI market insights</div></div>
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <button class="btn btn-primary" onclick="runAI()">Run Analysis</button>
+            <button class="btn btn-ghost" onclick="clearAI()">Clear</button>
           </div>
-          <div class="ai-output" id="ai-output">Click "Run Analysis" to scan market data and get AI investment recommendations.</div>
-          <div class="ai-chat">
-            <div class="ai-chat-messages" id="ai-chat-messages"></div>
-            <div class="chat-input-row">
-              <input class="chat-input" id="ai-input" placeholder="Ask the AI about market data..." onkeydown="if(event.key==='Enter')askAI()">
-              <button class="chat-send" onclick="askAI()">Ask</button>
-            </div>
-          </div>
-        </section>
-
-        <!-- Shield -->
-        <section id="tab-shield" class="tab-content">
-          <div class="search-bar">
-            <input class="form-input" id="shield-service" placeholder="Service ID...">
-            <select class="form-select" id="shield-platform">
-              <option value="java">Java</option>
-              <option value="bedrock">Bedrock</option>
-            </select>
-            <button class="btn btn-primary" onclick="loadShield()">Load</button>
-          </div>
-          <div class="two-col">
-            <div class="section">
-              <div class="section-head"><span class="section-title">Config</span></div>
-              <pre class="code-block" id="shield-config">Enter a service ID to view config.</pre>
-            </div>
-            <div class="section">
-              <div class="section-head"><span class="section-title">Metrics</span></div>
-              <pre class="code-block" id="shield-metrics">Enter a service ID to view metrics.</pre>
-            </div>
-          </div>
-          <div class="section">
-            <div class="section-head"><span class="section-title">Stats</span></div>
-            <pre class="code-block" id="shield-stats">Enter a service ID to view stats.</pre>
-          </div>
-        </section>
+        </div>
       </div>
-    </main>
+    </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/app.js"></script>
 </body>

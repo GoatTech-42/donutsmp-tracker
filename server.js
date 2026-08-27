@@ -2,238 +2,151 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
-const donutsmp = require('./lib/donutsmp');
 const AuctionAnalyzer = require('./lib/analyzer');
-const ai = require('./lib/ai');
+const { fetchAllAuctions, fetchTransactions, leaderboard, playerLookup, playerStats } = require('./lib/donutsmp');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*' } });
-
-app.use(express.static(path.join(__dirname, 'public')));
-app.use(express.json());
+const io = new Server(server);
+const PORT = process.env.PORT || 3001;
 
 const analyzer = new AuctionAnalyzer();
 let lastAuctions = [];
 let lastTransactions = [];
-let lastLeaderboards = {};
-let aiAnalysis = null;
-let aiTimestamp = null;
-let scanInterval = null;
-let playerCache = {};
+let scanCount = 0;
+let lastScanTime = null;
 
-// --- API Routes ---
+app.use(express.static(path.join(__dirname, 'public')));
 
+// Health
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', snapshots: analyzer.snapshots.length, uptime: Math.floor(process.uptime()) });
+  res.json({ status: 'ok', auctions: lastAuctions.length, snapshots: analyzer.snapshots.length, scanCount, lastScan: lastScanTime, uptime: process.uptime() });
 });
 
-app.get('/api/auction/list', async (req, res) => {
+// Flips
+app.get('/api/flips', (req, res) => {
+  const flips = analyzer.detectFlips(lastAuctions);
+  const minProfit = parseInt(req.query.minProfit) || 0;
+  const minROI = parseFloat(req.query.minROI) || 0;
+  const type = req.query.type || '';
+  const category = req.query.category || '';
+  let filtered = flips;
+  if (minProfit > 0) filtered = filtered.filter(f => f.profit >= minProfit);
+  if (minROI > 0) filtered = filtered.filter(f => f.roi >= minROI);
+  if (type) filtered = filtered.filter(f => f.type === type);
+  if (category) filtered = filtered.filter(f => f.category === category);
+  res.json({ flips: filtered, total: filtered.length });
+});
+
+// Market intelligence
+app.get('/api/intelligence', (req, res) => {
+  const intel = analyzer.getMarketIntelligence(lastAuctions);
+  res.json(intel);
+});
+
+// Portfolio optimizer
+app.get('/api/portfolio', (req, res) => {
+  const investment = parseInt(req.query.budget) || 1000000;
+  const portfolio = analyzer.calculatePortfolio(investment, lastAuctions);
+  res.json(portfolio);
+});
+
+// Auctions
+app.get('/api/auctions', (req, res) => {
+  const search = req.query.search || '';
+  const page = parseInt(req.query.page) || 1;
+  const perPage = 50;
+  let filtered = lastAuctions;
+  if (search) {
+    const q = search.toLowerCase();
+    filtered = lastAuctions.filter(a => a.itemName.toLowerCase().includes(q));
+  }
+  const start = (page - 1) * perPage;
+  const paged = filtered.slice(start, start + perPage);
+  res.json({ auctions: paged, total: filtered.length, page, pages: Math.ceil(filtered.length / perPage) });
+});
+
+// Transactions
+app.get('/api/transactions', (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const perPage = 50;
+  const start = (page - 1) * perPage;
+  const paged = lastTransactions.slice(start, start + perPage);
+  res.json({ transactions: paged, total: lastTransactions.length, page, pages: Math.ceil(lastTransactions.length / perPage) });
+});
+
+// Leaderboards
+app.get('/api/leaderboards/:type', async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const search = req.query.search || '';
-    const sort = req.query.sort || '';
-    const data = await donutsmp.auctionList(page, search, sort);
+    const data = await leaderboard(req.params.type, parseInt(req.query.page) || 1);
     res.json(data);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-app.get('/api/auction/transactions', async (req, res) => {
+// Player
+app.get('/api/player/:name', async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const data = await donutsmp.auctionTransactions(page);
-    res.json(data);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+    const [lookup, stats] = await Promise.allSettled([
+      playerLookup(req.params.name),
+      playerStats(req.params.name)
+    ]);
+    res.json({ lookup: lookup.status === 'fulfilled' ? lookup.value : null, stats: stats.status === 'fulfilled' ? stats.value : null });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-app.get('/api/player/lookup/:user', async (req, res) => {
+// Tracked items
+app.get('/api/items', (req, res) => {
+  const items = analyzer.getTrackedItems();
+  res.json({ items, count: items.length });
+});
+
+// Item price history
+app.get('/api/item/:name/history', (req, res) => {
+  const history = analyzer.getHistory(req.params.name, parseInt(req.query.limit) || 50);
+  res.json({ item: req.params.name, history });
+});
+
+// Scan trigger
+app.post('/api/scan', async (req, res) => {
   try {
-    const data = await donutsmp.playerLookup(req.params.user);
-    res.json(data);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+    await runScan();
+    res.json({ ok: true, auctions: lastAuctions.length, scanCount });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-app.get('/api/player/stats/:user', async (req, res) => {
-  try {
-    const data = await donutsmp.playerStats(req.params.user);
-    res.json(data);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
+async function runScan() {
+  console.log(`[Scanner] Starting scan #${scanCount + 1}...`);
+  const auctions = await fetchAllAuctions();
+  if (auctions.length > 0) {
+    lastAuctions = auctions;
+    analyzer.addSnapshot(auctions);
+    scanCount++;
+    lastScanTime = new Date().toISOString();
+    console.log(`[Scanner] Scan #${scanCount} complete: ${auctions.length} auctions`);
+    io.emit('scan:update', { auctions: auctions.length, scanCount, lastScan: lastScanTime });
+  }
+}
 
-app.get('/api/leaderboard/:type', async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const data = await donutsmp.leaderboard(req.params.type, page);
-    res.json(data);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
+// Auto-scan every 5 minutes
+setInterval(runScan, 5 * 60 * 1000);
 
-app.get('/api/leaderboards', async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const data = await donutsmp.allLeaderboards(page);
-    res.json(data);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get('/api/shield/config/:service', async (req, res) => {
-  try {
-    const platform = req.query.platform || 'java';
-    const data = await donutsmp.shieldConfig(req.params.service, platform);
-    res.json(data);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get('/api/shield/metrics/:service', async (req, res) => {
-  try {
-    const data = await donutsmp.shieldMetrics(req.params.service);
-    res.json(data);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get('/api/shield/stats/:service', async (req, res) => {
-  try {
-    const data = await donutsmp.shieldStats(req.params.service);
-    res.json(data);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get('/api/market/overview', (req, res) => {
-  res.json(analyzer.getMarketOverview());
-});
-
-app.get('/api/market/history/:item', (req, res) => {
-  res.json(analyzer.getItemHistory(decodeURIComponent(req.params.item)));
-});
-
-app.get('/api/market/trends', (req, res) => {
-  res.json(analyzer.getTrends());
-});
-
-app.get('/api/market/summary', (req, res) => {
-  res.json(analyzer.getSnapshotSummary());
-});
-
-app.post('/api/ai/analyze', async (req, res) => {
-  try {
-    const context = analyzer.getChatContext();
-    const result = await ai.analyze(context, req.body.context || '');
-    aiAnalysis = result;
-    aiTimestamp = Date.now();
-    io.emit('ai:analysis', { content: result.content, timestamp: aiTimestamp });
-    res.json(result);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/ai/ask', async (req, res) => {
-  try {
-    const context = analyzer.getChatContext();
-    const answer = await ai.quickInsight(req.body.question, context);
-    res.json({ answer });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// --- Socket.IO ---
-
+// Socket.IO
 io.on('connection', (socket) => {
-  console.log(`[Tracker] Client: ${socket.id}`);
-  socket.emit('init', {
-    market: analyzer.getMarketOverview(),
-    summary: analyzer.getSnapshotSummary(),
-    trends: analyzer.getTrends().slice(0, 20),
-    lastAuctions: lastAuctions.slice(0, 50),
-    lastTransactions: lastTransactions.slice(0, 50),
-    leaderboards: lastLeaderboards,
-    aiAnalysis: aiAnalysis ? { content: aiAnalysis.content, timestamp: aiTimestamp } : null
-  });
-
-  socket.on('player:lookup', async (data) => {
-    try {
-      const lookup = await donutsmp.playerLookup(data.user);
-      const stats = await donutsmp.playerStats(data.user);
-      socket.emit('player:result', { user: data.user, lookup: lookup.result, stats: stats.result });
-    } catch (e) { socket.emit('player:error', { error: e.message }); }
-  });
-
-  socket.on('auction:search', async (data) => {
-    try {
-      const result = await donutsmp.auctionList(1, data.search || '', data.sort || '');
-      socket.emit('auction:results', result);
-    } catch (e) { socket.emit('error', { error: e.message }); }
-  });
-
-  socket.on('ai:analyze', async () => {
-    try {
-      const context = analyzer.getChatContext();
-      const result = await ai.analyze(context);
-      aiAnalysis = result;
-      aiTimestamp = Date.now();
-      socket.emit('ai:analysis', { content: result.content, timestamp: aiTimestamp });
-    } catch (e) { socket.emit('ai:error', { error: e.message }); }
-  });
-
-  socket.on('ai:ask', async (data) => {
-    try {
-      const context = analyzer.getChatContext();
-      const answer = await ai.quickInsight(data.question, context);
-      socket.emit('ai:answer', { answer, question: data.question });
-    } catch (e) { socket.emit('ai:error', { error: e.message }); }
-  });
+  console.log('[WS] Client connected');
+  socket.emit('init', { auctions: lastAuctions.length, scanCount, lastScan: lastScanTime });
+  socket.on('disconnect', () => console.log('[WS] Client disconnected'));
 });
 
-// --- Data Fetching Loop ---
-
-async function scanAuctions() {
-  try {
-    let allAuctions = [];
-    for (let page = 1; page <= 5; page++) {
-      const data = await donutsmp.auctionList(page);
-      if (data.result && data.result.length) allAuctions.push(...data.result);
-      else break;
-    }
-    lastAuctions = allAuctions;
-    const snapshot = analyzer.recordSnapshot(allAuctions);
-    io.emit('market:update', {
-      snapshot: { items: Object.keys(snapshot.items).length, total: Object.values(snapshot.items).reduce((s, i) => s + i.count, 0) },
-      trends: analyzer.getTrends().slice(0, 30),
-      overview: analyzer.getMarketOverview()
-    });
-    console.log(`[Tracker] Scan: ${Object.keys(snapshot.items).length} items, ${allAuctions.length} listings`);
-  } catch (e) { console.error(`[Tracker] Scan error: ${e.message}`); }
-}
-
-async function scanTransactions() {
-  try {
-    let allTx = [];
-    for (let page = 1; page <= 3; page++) {
-      const data = await donutsmp.auctionTransactions(page);
-      if (data.result && data.result.length) allTx.push(...data.result);
-      else break;
-    }
-    lastTransactions = allTx;
-    io.emit('transactions:update', allTx.slice(0, 50));
-  } catch (e) { console.error(`[Tracker] TX error: ${e.message}`); }
-}
-
-async function scanLeaderboards() {
-  try {
-    lastLeaderboards = await donutsmp.allLeaderboards(1);
-    io.emit('leaderboards:update', lastLeaderboards);
-  } catch (e) { console.error(`[Tracker] LB error: ${e.message}`); }
-}
-
-async function fullScan() {
-  await Promise.allSettled([scanAuctions(), scanTransactions(), scanLeaderboards()]);
-}
-
-// --- Start ---
-
-const PORT = process.env.PORT || 3001;
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`[Tracker] http://0.0.0.0:${PORT}`);
-  fullScan();
-  scanInterval = setInterval(fullScan, 60000);
+// Initial scan
+runScan().then(() => {
+  // Fetch transactions in background
+  fetchTransactions(10).then(tx => { lastTransactions = tx; console.log(`[Scanner] Loaded ${tx.length} transactions`); });
 });
 
-process.on('SIGTERM', () => { clearInterval(scanInterval); server.close(() => process.exit(0)); });
-process.on('SIGINT', () => { clearInterval(scanInterval); server.close(() => process.exit(0)); });
+server.listen(PORT, '0.0.0.0', () => console.log(`[Tracker] http://0.0.0.0:${PORT}`));
