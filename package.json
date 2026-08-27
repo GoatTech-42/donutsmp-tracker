@@ -1,0 +1,14 @@
+{
+  "name": "donutsmp-tracker",
+  "version": "1.0.0",
+  "description": "DonutSMP auction tracker & AI investment agent",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "socket.io": "^4.8.0"
+  },
+  "engines": { "node": ">=18.0.0" }
+}
