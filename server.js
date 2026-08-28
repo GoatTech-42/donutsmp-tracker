@@ -355,6 +355,14 @@ async function runScan() {
       io.emit('scan:partial', publicStatus())
     }
     auctions = await api.fetchAllAuctions(9999, onProgress, onAuctionPartial)
+    if (auctions.length >= 500) {
+      // Let the analyzer start building priceHistory even before transactions arrive,
+      // so the progressive trainPredictor thresholds can fire and we don't sit at 0 epochs
+      // for the whole 10-minute first scan.
+      try {
+        analyzer.storePartialAuctions(auctions)
+      } catch (_) {}
+    }
     transactions = await api.fetchTransactions(9999, onProgress)
     if (!auctions.length) throw new Error('Upstream returned no auctions')
     state.auctions = auctions
