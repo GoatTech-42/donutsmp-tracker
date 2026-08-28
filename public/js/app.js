@@ -21,10 +21,14 @@ function skeletons(count = 3, lines = 3) {
 }
 
 async function request(url, options) {
-  const response = await fetch(url, options);
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || `Request failed (${response.status})`);
-  return payload;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || `Request failed (${response.status})`);
+    return payload;
+  } finally { clearTimeout(timer); }
 }
 function toast(message, error = false) {
   const node = document.createElement('div');
@@ -382,18 +386,6 @@ $('#refresh-button').addEventListener('click', async () => {
   try { await request('/api/refresh', { method:'POST' }); toast('Scan triggered — feed will update shortly'); }
   catch (error) { toast(error.message, true); }
   finally { btn.disabled = false; btn.textContent = '↻ Refresh feed'; }
-});
-$('#export-button').addEventListener('click', async () => {
-  try {
-    const data = await request('/api/export?format=json');
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `pulse-export-${Date.now()}.json`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    toast('Export downloaded');
-  } catch (error) { toast(error.message, true); }
 });
 $('#export-button').addEventListener('click', async () => {
   try {

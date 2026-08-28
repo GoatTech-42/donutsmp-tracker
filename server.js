@@ -23,7 +23,7 @@ app.use((req, res, next) => {
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   next();
 });
-app.use(express.static(path.join(__dirname, 'public'), { maxAge: process.env.NODE_ENV === 'production' ? '1h' : 0 }));
+app.use(express.static(path.join(__dirname, 'public'), { maxAge: process.env.NODE_ENV === 'production' ? 3600000 : 0 }));
 
 const numberParam = (value, fallback, min, max) => Math.min(max, Math.max(min, Number(value) || fallback));
 const asyncRoute = handler => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
@@ -198,7 +198,7 @@ async function runScan() {
     // Track flips found in this scan
     const flips = analyzer.detectFlips(auctions, transactions);
     for (const flip of flips.slice(0, 50)) {
-      try { storage.saveFlip(flip); } catch (_) {}
+      try { storage.saveFlip(flip); } catch (e) { console.warn('[Storage] Flip save failed:', e.message); }
     }
   } catch (error) {
     state.lastError = error.message;
@@ -213,10 +213,14 @@ async function runScan() {
 let scanTimer;
 async function start() {
   server.listen(PORT, '0.0.0.0', () => console.log(`[Pulse] listening on http://0.0.0.0:${PORT} (${state.source} data)`));
-  runScan().catch(() => {});
-  scanTimer = setInterval(() => runScan().catch(() => {}), SCAN_INTERVAL);
+  runScan().catch(err => console.error('[Scanner] Startup scan failed:', err.message));
+  scanTimer = setInterval(() => runScan().catch(err => console.error('[Scanner] Scheduled scan failed:', err.message)), SCAN_INTERVAL);
 }
-function shutdown() { clearInterval(scanTimer); server.close(() => process.exit(0)); }
+function shutdown() {
+  clearInterval(scanTimer);
+  try { storage.close(); } catch (_) {}
+  server.close(() => process.exit(0));
+}
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
