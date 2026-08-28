@@ -12,7 +12,7 @@ const io = new Server(server, { serveClient: true });
 const PORT = Number(process.env.PORT || 3001);
 const SCAN_INTERVAL = Math.max(60_000, Number(process.env.SCAN_INTERVAL_MS || 300_000));
 const analyzer = new AuctionAnalyzer();
-const state = { auctions: [], transactions: [], scanCount: 0, scanning: false, lastScan: null, lastSuccess: null, lastError: null, source: api.hasApiKey ? 'live' : 'demo' };
+const state = { auctions: [], transactions: [], scanCount: 0, scanning: false, lastScan: null, lastSuccess: null, lastError: null, source: 'live' };
 
 app.disable('x-powered-by');
 app.use(express.json({ limit: '64kb' }));
@@ -164,9 +164,9 @@ async function runScan() {
 
 let scanTimer;
 async function start() {
-  try { await runScan(); } catch (_) { /* health endpoint reports the failure */ }
-  scanTimer = setInterval(() => runScan().catch(() => {}), SCAN_INTERVAL);
   server.listen(PORT, '0.0.0.0', () => console.log(`[Pulse] listening on http://0.0.0.0:${PORT} (${state.source} data)`));
+  runScan().catch(() => {});
+  scanTimer = setInterval(() => runScan().catch(() => {}), SCAN_INTERVAL);
 }
 function shutdown() { clearInterval(scanTimer); server.close(() => process.exit(0)); }
 process.on('SIGTERM', shutdown);

@@ -1,7 +1,7 @@
 const state = { overview: null, flips: [], market: [], salesPage: 1, view: 'overview', nnPredictions: [], anomalies: [], itemName: null };
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
-const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&':'&','<':'<','>':'>',"'":''','"':'"' })[char]);
+const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' })[char]);
 const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
 const number = new Intl.NumberFormat('en-US');
 const money = value => `$${compact.format(Number(value) || 0)}`;
@@ -60,11 +60,11 @@ $$('[data-go]').forEach(node => node.addEventListener('click', () => navigate(no
 $('#menu-button').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
 
 function renderStatus(status) {
-  $('#source-label').textContent = status.demo ? 'Demo feed' : 'Official API';
-  $('#source-note').textContent = status.demo ? 'Safe sample data. Add DONUTSMP_API_KEY for the official live feed.' : 'Official auction and transaction data.';
+  $('#source-label').textContent = 'Official API';
+  $('#source-note').textContent = 'Live auction and transaction data.';
   $('#scan-count').textContent = `Scan #${status.scanCount}`;
   $('#last-scan').textContent = relative(status.lastSuccess);
-  $('#feed-status').textContent = status.scanning ? 'Scanning' : status.lastError ? 'Degraded' : status.demo ? 'Demo live' : 'Live';
+  $('#feed-status').textContent = status.scanning ? 'Scanning' : status.lastError ? 'Degraded' : 'Live';
 }
 
 async function loadOverview() {
@@ -90,7 +90,7 @@ async function loadOverview() {
     $('#active-market').innerHTML = data.active.slice(0, 7).map(x => `<div class="compact-row"><span>${escapeHtml(x.name)}</span><b>${x.sales} sales</b><small>${money(x.salesValue)} turnover</small><small>${money(x.floor)} floor</small></div>`).join('') || empty('Waiting for sales data.');
     $('#movers').classList.remove('loading-block');
     $('#movers').innerHTML = data.movers.slice(0, 7).map(x => `<div class="compact-row"><span>${escapeHtml(x.name)}</span><b class="${x.change >= 0 ? 'up' : 'down'}">${x.change > 0 ? '+' : ''}${x.change}%</b><small>${money(x.floor)} floor</small><small>${x.confidence}% confidence</small></div>`).join('') || empty('More scans are needed for momentum.');
-    $('#data-health').innerHTML = `<div class="health-item"><b>${data.status.demo ? 'Demonstration mode' : 'Official DonutSMP API'}</b><span>${data.status.demo ? 'Fully functional sample dataset' : 'Authenticated live market feed'}</span></div><div class="health-item"><b>Neural net</b><span>${data.neuralNet?.pricePredictor?.trained ? `${data.neuralNet.pricePredictor.epochs} epochs trained` : 'Training on first snapshots'}</span></div><div class="health-item"><b>${relative(data.status.lastSuccess)}</b><span>Last successful snapshot</span></div>`;
+    $('#data-health').innerHTML = `<div class="health-item"><b>Official DonutSMP API</b><span>Authenticated live market feed</span></div><div class="health-item"><b>Neural net</b><span>${data.neuralNet?.pricePredictor?.trained ? `${data.neuralNet.pricePredictor.epochs} epochs trained` : 'Training on first snapshots'}</span></div><div class="health-item"><b>${relative(data.status.lastSuccess)}</b><span>Last successful snapshot</span></div>`;
     
     // Predictions panel
     $('#predictions').classList.remove('loading-block');
