@@ -5,6 +5,7 @@ const { Server } = require('socket.io');
 const AuctionAnalyzer = require('./lib/analyzer');
 const api = require('./lib/donutsmp');
 const ai = require('./lib/ai');
+const storage = require('./lib/storage');
 
 const app = express();
 const server = http.createServer(app);
@@ -89,6 +90,45 @@ app.get('/api/outliers', (req, res) => {
   res.json({ outliers, generatedAt: new Date().toISOString() });
 });
 
+app.get('/api/flip-history', (req, res) => {
+  const limit = numberParam(req.query.limit, 100, 1, 500);
+  const item = req.query.item;
+  const history = item ? storage.getFlipHistoryByItem(item, limit) : storage.getFlipHistory(limit);
+  res.json({ history, total: history.length });
+});
+
+app.get('/api/export', (req, res) => {
+  const format = req.query.format || 'json';
+  const intel = analyzer.getIntelligence(state.auctions, state.transactions);
+  if (format === 'csv') {
+    const flips = intel.topFlips;
+    const header = 'Type,Name,Buy,Sell,Profit,ROI%,Risk,Confidence,Volume\n';
+    const rows = flips.map(f => `${f.type},${f.name},${f.buyPrice},${f.afterTax},${f.profit},${f.roi},${f.risk.label},${f.confidence},${f.volume}`).join('\n');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="pulse-export-${Date.now()}.csv"`);
+    return res.send(header + rows);
+  }
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', `attachment; filename="pulse-export-${Date.now()}.json"`);
+  res.json({ exportedAt: new Date().toISOString(), flips: intel.topFlips, predictions: intel.predictions, anomalies: intel.anomalies, outliers: intel.outliers, summary: intel.summary });
+});
+
+app.get('/api/enchant-stats/:item', (req, res) => {
+  try {
+    const stats = storage.getEnchantmentStats(req.params.item);
+    const combos = storage.getEnchantmentCombos(req.params.item);
+    res.json({ stats, combos });
+  } catch (e) { res.json({ stats: [], combos: [] }); }
+});
+
+app.get('/api/enchant-trends/:enchant', (req, res) => {
+  try {
+    const days = numberParam(req.query.days, 7, 1, 90);
+    const trends = storage.getEnchantmentTrends(req.params.enchant, days);
+    res.json({ trends });
+  } catch (e) { res.json({ trends: [] }); }
+});
+
 app.get('/api/neural/predictions', (req, res) => {
   const intel = analyzer.getIntelligence(state.auctions, state.transactions);
   res.json({ predictions: intel.predictions, anomalies: intel.anomalies, generatedAt: new Date().toISOString() });
@@ -144,14 +184,22 @@ async function runScan() {
   state.lastScan = new Date().toISOString();
   io.emit('scan:status', publicStatus());
   try {
-    const [auctions, transactions] = await Promise.all([api.fetchAllAuctions(), api.fetchTransactions()]);
+    const onProgress = (info) => { io.emit('scan:progress', { ...info, status: publicStatus() }); };
+    const auctions = await api.fetchAllAuctions(9999, onProgress);
+    const transactions = await api.fetchTransactions(9999, onProgress);
     if (!auctions.length) throw new Error('Upstream returned no auctions');
     state.auctions = auctions;
     state.transactions = transactions;
     state.scanCount += 1;
     state.lastSuccess = new Date().toISOString();
     state.lastError = null;
-    analyzer.addSnapshot(auctions);
+    analyzer.addSnapshot(auctions, transactions);
+    
+    // Track flips found in this scan
+    const flips = analyzer.detectFlips(auctions, transactions);
+    for (const flip of flips.slice(0, 50)) {
+      try { storage.saveFlip(flip); } catch (_) {}
+    }
   } catch (error) {
     state.lastError = error.message;
     console.error('[Scanner]', error.message);
