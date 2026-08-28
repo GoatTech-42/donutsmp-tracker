@@ -20,7 +20,7 @@
 <body>
   <div class="app-shell">
     <aside class="sidebar" id="sidebar">
-      <a class="brand" href="#overview" aria-label="Pulse overview"><span class="brand-mark"><svg viewBox="0 0 36 36" width="36" height="36"><defs><linearGradient id="bg2" x1="0" y1="0" x2="36" y2="36" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#5563d1"/><stop offset="100%" stop-color="#404ebf"/></linearGradient></defs><rect width="36" height="36" rx="10" fill="url(#bg2)"/><path d="M4 18 H11 L13 10 L15 26 L18 5 L21 23 L23 15 H32" fill="none" stroke="white" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span><b>Pulse</b><small>DonutSMP intelligence</small></span></a>
+          <a class="brand" href="#overview" aria-label="Pulse overview"><span class="brand-mark"><svg viewBox="0 0 36 36" width="36" height="36"><defs><linearGradient id="bg2" x1="0" y1="0" x2="36" y2="36" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#5563d1"/><stop offset="100%" stop-color="#404ebf"/></linearGradient></defs><rect width="36" height="36" rx="10" fill="url(#bg2)"/><path d="M4 18 H11 L13 10 L15 26 L18 5 L21 23 L23 15 H32" fill="none" stroke="white" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span><b>Pulse</b><small>DonutSMP</small></span></a>
       <nav aria-label="Primary navigation">
         <p class="nav-label">Workspace</p>
         <button class="nav-link active" data-view="overview"><span class="icon">⌁</span>Overview</button>
@@ -45,29 +45,29 @@
     <main>
       <header class="topbar">
         <button class="menu-button" id="menu-button" aria-label="Toggle menu">☰</button>
-        <div><p class="eyebrow" id="page-eyebrow">MARKET COMMAND CENTER</p><h1 id="page-title">Overview</h1></div>
+        <div>        <p class="eyebrow" id="page-eyebrow">Pulse</p><h1 id="page-title">Overview</h1></div>
         <div class="top-actions"><span class="status-pill"><i class="live-dot"></i><span id="feed-status">Syncing</span></span><button class="button secondary" id="export-button">↓ Export</button><button class="button secondary" id="refresh-button">↻ Refresh feed</button></div>
       </header>
 
       <section id="view-overview" class="view active">
         <div class="hero-panel">
-          <div><span class="kicker">Live market brief</span><h2>Trade on signal,<br><span>not speculation.</span></h2><p>Sale-backed pricing, liquidity scoring, neural predictions and risk-adjusted opportunities from the DonutSMP economy.</p></div>
+          <div><span class="kicker">Live market</span><h2>Pulse</h2><p>Filtered asking prices, transaction-anchored fair value, and confidence-aware flips.</p></div>
           <div class="hero-signal"><div class="signal-orbit"><span id="hero-score">—</span><small>signals</small></div><p id="hero-caption">Analyzing the current market</p></div>
         </div>
         <div class="metric-grid" id="metric-grid"></div>
-        <article class="panel" id="ai-panel" style="margin-bottom:12px"><div class="panel-head"><div><span class="kicker">Groq AI analyst — cached 90s</span><h3>Analyst one-liners</h3></div><button class="button secondary" id="ai-refresh" style="font-size:12px;padding:6px 12px">⟳ Ask AI</button></div><div id="ai-lines" class="compact-list loading-block" style="white-space:pre-wrap;font-family:var(--mono);font-size:13px;line-height:1.6"></div><div id="ai-meta" style="margin-top:8px;font-size:11px;color:var(--text3)"></div><div style="margin-top:10px;display:flex;gap:8px"><input id="ai-ask-input" placeholder="Ask about any item — e.g. 'is ancient_debris worth buying?'" style="flex:1;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text)"><button class="button primary" id="ai-ask-btn">Ask</button></div><div id="ai-ask-answer" style="margin-top:8px;font-size:13px;white-space:pre-wrap"></div></article>
+        <article class="panel" id="ai-panel" style="margin-bottom:12px"><div class="panel-head"><div><span class="kicker">Analyst</span><h3>One-liners</h3></div><button class="button secondary" id="ai-refresh" style="font-size:12px;padding:6px 12px">Refresh</button></div><div id="ai-lines" class="compact-list loading-block" style="white-space:pre-wrap;font-family:var(--mono);font-size:13px;line-height:1.6"></div><div id="ai-meta" style="margin-top:8px;font-size:11px;color:var(--text3)"></div><div style="margin-top:10px;display:flex;gap:8px"><input id="ai-ask-input" placeholder="Ask about any item — e.g. 'is ancient_debris worth buying?'" style="flex:1;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text)"><button class="button primary" id="ai-ask-btn">Ask</button></div><div id="ai-ask-answer" style="margin-top:8px;font-size:13px;white-space:pre-wrap"></div></article>
         <div class="dashboard-grid">
-          <article class="panel span-2"><div class="panel-head"><div><span class="kicker">Ranked by confidence</span><h3>Best opportunities</h3></div><button class="text-button" data-go="opportunities">View all →</button></div><div id="top-flips" class="opportunity-list loading-block"></div></article>
-          <article class="panel"><div class="panel-head"><div><span class="kicker">Recent transactions</span><h3>Market pulse</h3></div></div><div id="active-market" class="compact-list loading-block"></div></article>
-          <article class="panel"><div class="panel-head"><div><span class="kicker">Price movement</span><h3>Movers</h3></div></div><div id="movers" class="compact-list loading-block"></div></article>
-          <article class="panel span-2"><div class="panel-head"><div><span class="kicker">Coverage & provenance</span><h3>Data health</h3></div></div><div id="data-health" class="health-grid"></div></article>
+          <article class="panel span-2"><div class="panel-head"><div><span class="kicker">Filtered opportunities</span><h3>Top flips</h3></div><button class="text-button" data-go="opportunities">View all →</button></div><div id="top-flips" class="opportunity-list loading-block"></div></article>
+          <article class="panel"><div class="panel-head"><div><span class="kicker">Live</span><h3>Market pulse</h3></div></div><div id="active-market" class="compact-list loading-block"></div></article>
+          <article class="panel"><div class="panel-head"><div><span class="kicker">24h</span><h3>Movers</h3></div></div><div id="movers" class="compact-list loading-block"></div></article>
+          <article class="panel span-2"><div class="panel-head"><div><span class="kicker">Coverage</span><h3>Data health</h3></div></div><div id="data-health" class="health-grid"></div></article>
         </div>
         <div class="dashboard-grid" style="margin-top:12px">
-          <article class="panel span-2"><div class="panel-head"><div><span class="kicker">Neural network forecast</span><h3>24h price predictions</h3></div></div><div id="predictions" class="compact-list loading-block"></div></article>
-          <article class="panel"><div class="panel-head"><div><span class="kicker">Model performance</span><h3>Neural net status</h3></div></div><div id="nn-status" class="compact-list loading-block"></div></article>
+          <article class="panel span-2"><div class="panel-head"><div><span class="kicker">Model</span><h3>Predictions</h3></div></div><div id="predictions" class="compact-list loading-block"></div></article>
+          <article class="panel"><div class="panel-head"><div><span class="kicker">Training</span><h3>Model status</h3></div></div><div id="nn-status" class="compact-list loading-block"></div></article>
         </div>
         <div class="dashboard-grid" style="margin-top:12px">
-          <article class="panel span-2"><div class="panel-head"><div><span class="kicker">Statistical outliers</span><h3>Price outliers (Z-score & IQR)</h3></div></div><div id="outliers-list" class="compact-list loading-block"></div></article>
+          <article class="panel span-2"><div class="panel-head"><div><span class="kicker">Outliers</span><h3>Price outliers</h3></div></div><div id="outliers-list" class="compact-list loading-block"></div></article>
         </div>
       </section>
 

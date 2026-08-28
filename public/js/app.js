@@ -110,13 +110,19 @@ async function loadOverview() {
       ['Neural epochs', number.format(data.neuralNet?.pricePredictor?.epochs || 0), `Loss: ${data.neuralNet?.pricePredictor?.lastLoss?.toFixed(4) || 'N/A'}`]
     ].map(x => `<div class="metric-card"><span class="label">${x[0]}</span><strong>${x[1]}</strong><small>${x[2]}</small></div>`).join('');
 
-    $('#top-flips').classList.remove('loading-block');
-    $('#top-flips').innerHTML = data.topFlips.length ? data.topFlips.map(f => {
-      const ingHtml = f.ingredients ? f.ingredients.slice(0, 4).map(i => `${i.count}×${escapeHtml(i.name)}`).join('+') : '';
-      return `<button class="opportunity-row text-button" data-open-flips="${escapeHtml(f.name)}" data-open-item="${escapeHtml(f.name)}"><div><div class="asset-name">${escapeHtml(f.name)}</div><span class="strategy">${f.type}${ingHtml ? ' · ' + ingHtml : ''} · ${f.risk.label} risk</span></div><div><div class="profit">+${money(f.profit)}</div><div class="roi">${f.roi}% ROI</div></div></button>`;
-    }).join('') : empty('No qualified opportunities yet.');
-    $$('[data-open-flips]').forEach(node => node.addEventListener('click', () => { navigate('opportunities'); $('#flip-search').value = node.dataset.openFlips; loadFlips(); }));
-    $$('[data-open-item]').forEach(node => node.addEventListener('click', (e) => { e.stopPropagation(); openItemDetail(node.dataset.openItem); }));
+    const midScanNoSales = data.status.scanning && data.summary.recordedSales === 0;
+    if (midScanNoSales) {
+      $('#top-flips').classList.remove('loading-block');
+      $('#top-flips').innerHTML = `<div class="empty-message" style="opacity:.8">Scan in progress — ${number.format(data.summary.totalAuctions || 0)} auctions so far, waiting on sales to anchor prices. Board updates automatically.</div>`;
+    } else {
+      $('#top-flips').classList.remove('loading-block');
+      $('#top-flips').innerHTML = data.topFlips.length ? data.topFlips.map(f => {
+        const ingHtml = f.ingredients ? f.ingredients.slice(0, 4).map(i => `${i.count}×${escapeHtml(i.name)}`).join('+') : '';
+        return `<button class="opportunity-row text-button" data-open-flips="${escapeHtml(f.name)}" data-open-item="${escapeHtml(f.name)}"><div><div class="asset-name">${escapeHtml(f.name)}</div><span class="strategy">${f.type}${ingHtml ? ' · ' + ingHtml : ''} · ${f.risk.label} risk</span></div><div><div class="profit">+${money(f.profit)}</div><div class="roi">${f.roi}% ROI</div></div></button>`;
+      }).join('') : empty('No qualified opportunities yet.');
+      $$('[data-open-flips]').forEach(node => node.addEventListener('click', () => { navigate('opportunities'); $('#flip-search').value = node.dataset.openFlips; loadFlips(); }));
+      $$('[data-open-item]').forEach(node => node.addEventListener('click', (e) => { e.stopPropagation(); openItemDetail(node.dataset.openItem); }));
+    }
 
     $('#active-market').classList.remove('loading-block');
     $('#active-market').innerHTML = data.active.slice(0, 7).map(x => {
@@ -130,7 +136,11 @@ async function loadOverview() {
     $('#movers').innerHTML = data.movers.slice(0, 7).map(x => `<div class="compact-row" style="cursor:pointer" data-open-item="${escapeHtml(x.name)}"><span>${escapeHtml(x.name)}</span><b class="${x.change >= 0 ? 'up' : 'down'}">${x.change > 0 ? '+' : ''}${x.change}%</b><small>${money(x.floor)} floor</small><small>${x.confidence}% conf</small></div>`).join('') || empty('More scans are needed for momentum.');
     $$('[data-open-item]', $('#movers')).forEach(n => n.addEventListener('click', () => openItemDetail(n.dataset.openItem)));
 
-    $('#data-health').innerHTML = `<div class="health-item"><b>Official DonutSMP API</b><span>Authenticated live market feed</span></div><div class="health-item"><b>Neural net</b><span>${data.neuralNet?.pricePredictor?.trained ? `${data.neuralNet.pricePredictor.epochs} epochs` : 'Training…'}</span></div><div class="health-item"><b>${relative(data.status.lastSuccess)}</b><span>Last snapshot</span></div>`;
+    if (midScanNoSales) {
+      $('#data-health').innerHTML = `<div class="health-item"><b>Scanning auctions</b><span>${number.format(data.summary.totalAuctions || 0)} auctions so far · sales still loading</span></div><div class="health-item"><b>Neural net</b><span>${data.neuralNet?.pricePredictor?.trained ? `${data.neuralNet.pricePredictor.epochs} epochs` : 'Waiting for sales to train'}</span></div><div class="health-item"><b>${data.status.scanning ? 'Live scan in progress' : relative(data.status.lastSuccess)}</b><span>Prices anchor once sales arrive</span></div>`;
+    } else {
+      $('#data-health').innerHTML = `<div class="health-item"><b>Official DonutSMP API</b><span>Authenticated live market feed</span></div><div class="health-item"><b>Neural net</b><span>${data.neuralNet?.pricePredictor?.trained ? `${data.neuralNet.pricePredictor.epochs} epochs` : 'Training…'}</span></div><div class="health-item"><b>${relative(data.status.lastSuccess)}</b><span>Last snapshot</span></div>`;
+    }
 
     $('#predictions').classList.remove('loading-block');
     $('#predictions').innerHTML = data.predictions?.slice(0, 8).map(p => `<div class="compact-row" style="cursor:pointer" data-open-item="${escapeHtml(p.name)}"><span>${escapeHtml(p.name)}</span><b>${money(p.current)}</b><b class="${p.change >= 0 ? 'up' : 'down'}">${p.change > 0 ? '+' : ''}${p.change}%</b><span class="${p.trend === 'UP' ? 'up' : p.trend === 'DOWN' ? 'down' : ''}">${p.trend}</span><small>${p.confidence}%</small></div>`).join('') || empty('Predictions need more training data.');
