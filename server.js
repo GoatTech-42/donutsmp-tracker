@@ -212,10 +212,19 @@ async function runScan() {
   state.scanning = true;
   state.lastScan = new Date().toISOString();
   io.emit('scan:status', publicStatus());
+  let auctions = [];
+  let transactions = [];
   try {
-    const onProgress = (info) => { io.emit('scan:progress', { ...info, status: publicStatus() }); };
-    const auctions = await api.fetchAllAuctions(9999, onProgress);
-    const transactions = await api.fetchTransactions(9999, onProgress);
+    const onProgress = (info) => io.emit('scan:progress', { ...info, status: publicStatus() });
+    // Publish partial auction state every ~20 pages so the dashboard never sits on
+    // "0 auctions" for 8 minutes. Previous scan's data stays visible until replaced.
+    const onAuctionPartial = (rows) => {
+      if (rows.length < 500) return;
+      state.auctions = rows.slice();
+      io.emit('scan:partial', publicStatus());
+    };
+    auctions = await api.fetchAllAuctions(9999, onProgress, onAuctionPartial);
+    transactions = await api.fetchTransactions(9999, onProgress);
     if (!auctions.length) throw new Error('Upstream returned no auctions');
     state.auctions = auctions;
     state.transactions = transactions;
