@@ -25,7 +25,10 @@ app.use((req, res, next) => {
 });
 app.use(express.static(path.join(__dirname, 'public'), { maxAge: process.env.NODE_ENV === 'production' ? 3600000 : 0 }));
 
-const numberParam = (value, fallback, min, max) => Math.min(max, Math.max(min, Number(value) || fallback));
+const numberParam = (value, fallback, min, max) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+};
 const asyncRoute = handler => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
 
 app.get('/api/health', (req, res) => res.json({ status: state.lastError && !state.lastSuccess ? 'degraded' : 'ok', ...publicStatus(), uptime: Math.round(process.uptime()) }));
@@ -36,8 +39,8 @@ app.get('/api/flips', (req, res) => {
   let flips = analyzer.detectFlips(state.auctions, state.transactions);
   const minProfit = numberParam(req.query.minProfit, 0, 0, 1e15);
   const minRoi = numberParam(req.query.minRoi, 0, 0, 10000);
-  if (req.query.type) flips = flips.filter(x => x.type === req.query.type);
-  if (req.query.search) flips = flips.filter(x => x.name.toLowerCase().includes(String(req.query.search).toLowerCase()));
+  if (req.query.type) flips = flips.filter(x => x.type === String(req.query.type).slice(0, 20));
+  if (req.query.search) flips = flips.filter(x => x.name.toLowerCase().includes(String(req.query.search).slice(0, 100).toLowerCase()));
   flips = flips.filter(x => x.profit >= minProfit && x.roi >= minRoi);
   res.json({ flips, total: flips.length, generatedAt: new Date().toISOString() });
 });
@@ -92,7 +95,7 @@ app.get('/api/outliers', (req, res) => {
 
 app.get('/api/flip-history', (req, res) => {
   const limit = numberParam(req.query.limit, 100, 1, 500);
-  const item = req.query.item;
+  const item = req.query.item ? String(req.query.item).slice(0, 100) : null;
   const history = item ? storage.getFlipHistoryByItem(item, limit) : storage.getFlipHistory(limit);
   res.json({ history, total: history.length });
 });
@@ -102,8 +105,12 @@ app.get('/api/export', (req, res) => {
   const intel = analyzer.getIntelligence(state.auctions, state.transactions);
   if (format === 'csv') {
     const flips = intel.topFlips;
+    const csvEscape = v => {
+      const s = String(v ?? '');
+      return s.match(/^[=+\-\t\r\n]/) ? `"${s.replace(/"/g, '""')}"` : s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
+    };
     const header = 'Type,Name,Buy,Sell,Profit,ROI%,Risk,Confidence,Volume\n';
-    const rows = flips.map(f => `${f.type},${f.name},${f.buyPrice},${f.afterTax},${f.profit},${f.roi},${f.risk.label},${f.confidence},${f.volume}`).join('\n');
+    const rows = flips.map(f => [f.type, f.name, f.buyPrice, f.afterTax, f.profit, f.roi, f.risk.label, f.confidence, f.volume].map(csvEscape).join(',')).join('\n');
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename="pulse-export-${Date.now()}.csv"`);
     return res.send(header + rows);
