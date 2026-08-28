@@ -13,6 +13,18 @@
 - Anomaly detector now trains continuously alongside price/trend predictors
 - All changes use blue Cosmos theme (`#404ebf`)
 
+## What We Just Did (v2.2)
+- Experience replay buffer (500 samples) for neural network training stability
+- Training interval lowered to 60s for continuous learning
+- AI analyst: tighter one-liner format, better craft flip context
+- `/api/export` endpoint (JSON + CSV download)
+- Export button in topbar
+- Enchantment flip detection: buy base + enchantment book → enchanted item → sell
+- Enchantment badge on flip cards
+- CSS: sparkline, skeleton loader, scan-progress, badge risk styles
+- Scan progress bar in sidebar
+- Sequential batched fetching (BATCH_SIZE=1, PAGE_DELAY=280ms) for 250 req/min limit
+
 ## What's Next
 
 ### Phase 1: Data Coverage (immediate)
@@ -22,17 +34,17 @@
 - [ ] Track all 1255 vanilla items + DonutSMP custom items
 
 ### Phase 2: Neural Network (this week)
+- [x] Experience replay buffer for training stability
 - [ ] Add LSTM/GRU temporal layers for better sequence prediction
 - [ ] Multi-horizon predictions (1h, 6h, 24h, 7d)
 - [ ] Uncertainty quantification (prediction intervals)
-- [ ] Experience replay buffer for training stability
 - [ ] Adversarial validation for distribution shift detection
 - [ ] Model checkpointing + rollback on degradation
 
 ### Phase 3: Intelligence (this week)
+- [x] Enchantment flip calculation (buy base + books → enchant → sell)
 - [ ] Cross-market arbitrage detection
 - [ ] Multi-step craft chain optimization (recursive)
-- [ ] Enchantment flip calculation (buy base + books → enchant → sell)
 - [ ] Shulker box arbitrage (buy contents → box → sell)
 - [ ] Whale tracking (large buyer/seller patterns)
 - [ ] Time-of-day pricing patterns
