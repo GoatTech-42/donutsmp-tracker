@@ -14,6 +14,11 @@ const relative = value => {
   return `${Math.floor(seconds / 86400)}d ago`;
 };
 function debounce(fn, delay = 250) { let timer; return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), delay); }; }
+function skeletons(count = 3, lines = 3) {
+  return Array.from({ length: count }, () =>
+    `<div class="skeleton" style="height:${lines * 18}px;margin:8px 0;border-radius:6px"></div>`
+  ).join('');
+}
 
 async function request(url, options) {
   const response = await fetch(url, options);
@@ -180,7 +185,8 @@ async function loadFlips() {
     state.flips = data.flips;
     $('#flip-grid').innerHTML = data.flips.length ? data.flips.map(f => {
       const ingHtml = f.ingredients ? `<div class="flip-ingredients">${f.ingredients.map(i => `<span class="badge">${i.count}× ${escapeHtml(i.name)} @ ${money(i.unitPrice)}</span>`).join(' ')}</div>` : '';
-      return `<article class="flip-card" data-open-item="${escapeHtml(f.name)}" style="cursor:pointer"><div class="flip-top"><div><h3>${escapeHtml(f.name)}</h3><div style="margin-top:7px"><span class="badge">${f.type}</span> <span class="badge risk-${f.risk.label.toLowerCase()}">${f.risk.label} risk</span>${f.resultCount > 1 ? ` <span class="badge">×${f.resultCount}</span>` : ''}</div></div><div><div class="flip-profit">+${money(f.profit)}</div><div class="roi">${f.roi}% ROI</div></div></div>${ingHtml}<div class="flip-route"><div><small>Acquire</small><b>${money(f.buyPrice)}</b></div><i>→</i><div><small>After tax</small><b>${money(f.afterTax)}</b></div></div><div class="flip-meta"><span>${f.volume} sales</span><span>${f.confidence}% conf</span><span>Score ${compact.format(f.score)}</span></div></article>`;
+      const enchBadge = f.enchantment ? ` <span class="badge" style="background:#1a1040;color:#a78bfa">${escapeHtml(f.enchantment)}</span>` : '';
+      return `<article class="flip-card" data-open-item="${escapeHtml(f.name)}" style="cursor:pointer"><div class="flip-top"><div><h3>${escapeHtml(f.name)}</h3><div style="margin-top:7px"><span class="badge">${f.type}</span> <span class="badge risk-${f.risk.label.toLowerCase()}">${f.risk.label} risk</span>${f.resultCount > 1 ? ` <span class="badge">×${f.resultCount}</span>` : ''}${enchBadge}</div></div><div><div class="flip-profit">+${money(f.profit)}</div><div class="roi">${f.roi}% ROI</div></div></div>${ingHtml}<div class="flip-route"><div><small>Acquire</small><b>${money(f.buyPrice)}</b></div><i>→</i><div><small>After tax</small><b>${money(f.afterTax)}</b></div></div><div class="flip-meta"><span>${f.volume} sales</span><span>${f.confidence}% conf</span><span>Score ${compact.format(f.score)}</span></div></article>`;
     }).join('') : empty('No opportunities match these filters.');
     $$('#flip-grid [data-open-item]').forEach(node => node.addEventListener('click', (e) => { e.stopPropagation(); openItemDetail(node.dataset.openItem); }));
   } catch (error) { toast(error.message, true); }
@@ -376,6 +382,18 @@ $('#refresh-button').addEventListener('click', async () => {
   try { await request('/api/refresh', { method:'POST' }); toast('Scan triggered — feed will update shortly'); }
   catch (error) { toast(error.message, true); }
   finally { btn.disabled = false; btn.textContent = '↻ Refresh feed'; }
+});
+$('#export-button').addEventListener('click', async () => {
+  try {
+    const data = await request('/api/export?format=json');
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `pulse-export-${Date.now()}.json`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast('Export downloaded');
+  } catch (error) { toast(error.message, true); }
 });
 $('#export-button').addEventListener('click', async () => {
   try {
