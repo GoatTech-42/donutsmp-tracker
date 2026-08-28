@@ -91,7 +91,9 @@ function renderStatus(status) {
   }
 }
 
+let overviewFirstLoad = true;
 async function loadOverview() {
+  const isLiveRefresh = !overviewFirstLoad;
   try {
     const data = await request('/api/overview');
     state.overview = data;
@@ -146,11 +148,12 @@ async function loadOverview() {
 
     const outliersList = $('#outliers-list');
     if (outliersList) {
-      outliersList.classList.remove('loading-block');
+      if (!isLiveRefresh) outliersList.classList.remove('loading-block');
       const outliers = data.outliers || [];
       outliersList.innerHTML = outliers.length ? outliers.slice(0, 10).map(o => `<div class="compact-row" style="cursor:pointer" data-open-item="${escapeHtml(o.name)}"><span>${escapeHtml(o.name)}</span><b class="${o.deviation >= 0 ? 'up' : 'down'}">${o.deviation > 0 ? '+' : ''}${o.deviation}%</b><small>Z: ${o.zScore}</small><small>${o.iqrOutlier ? 'IQR' : ''}</small><small>${o.direction}</small></div>`).join('') : empty('No statistical outliers detected.');
       $$('[data-open-item]', outliersList).forEach(n => n.addEventListener('click', () => openItemDetail(n.dataset.openItem)));
     }
+    overviewFirstLoad = false;
   } catch (error) { toast(error.message, true); }
 }
 
@@ -380,6 +383,41 @@ $('#nn-filter').addEventListener('change', loadPredictions);
 $('#nn-search').addEventListener('input', debounce(loadPredictions));
 $('#player-form').addEventListener('submit', lookupPlayer);
 $('#chart-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') loadChartState(); });
+async function loadAiPanel(force = false) {
+  const lines = document.getElementById('ai-lines');
+  const meta = document.getElementById('ai-meta');
+  if (!lines) return;
+  lines.textContent = 'Asking analyst…';
+  if (meta) meta.textContent = '';
+  try {
+    const data = await request('/api/ai/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    lines.textContent = data.response || '(no response)';
+    lines.classList.remove('loading-block');
+    if (meta) {
+      const parts = [];
+      if (data.model) parts.push(data.model);
+      if (data.latencyMs != null) parts.push(`${data.latencyMs}ms`);
+      if (data.cached) parts.push(`cached ${Math.round((data.cachedAgeMs||0)/1000)}s ago`);
+      if (data.usage) parts.push(`${data.usage.total_tokens||''} tokens`);
+      meta.textContent = parts.filter(Boolean).join(' · ');
+    }
+  } catch (e) {
+    lines.textContent = e.message.includes('503') ? 'AI not configured — set GROQ_API_KEY to enable analyst.' : `Analyst unavailable: ${e.message}`;
+    lines.classList.remove('loading-block');
+  }
+}
+async function askAi() {
+  const input = document.getElementById('ai-ask-input');
+  const out = document.getElementById('ai-ask-answer');
+  const q = input?.value?.trim();
+  if (!q) return;
+  if (out) out.textContent = 'Thinking…';
+  try {
+    const data = await request('/api/ai/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q }) });
+    if (out) out.textContent = data.response || '(no answer)';
+  } catch (e) { if (out) out.textContent = `Error: ${e.message}`; toast(e.message, true); }
+}
+
 $('#refresh-button').addEventListener('click', async () => {
   const btn = $('#refresh-button');
   btn.disabled = true; btn.textContent = '⟳ Scanning…';
@@ -387,6 +425,10 @@ $('#refresh-button').addEventListener('click', async () => {
   catch (error) { toast(error.message, true); }
   finally { btn.disabled = false; btn.textContent = '↻ Refresh feed'; }
 });
+// AI panel wiring (Overview)
+document.getElementById('ai-refresh')?.addEventListener('click', () => loadAiPanel(true));
+document.getElementById('ai-ask-btn')?.addEventListener('click', askAi);
+document.getElementById('ai-ask-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') askAi(); });
 $('#export-button').addEventListener('click', async () => {
   try {
     const data = await request('/api/export?format=json');
@@ -407,9 +449,15 @@ socket.on('scan:progress', (info) => {
   if (info.type === 'auctions') $('#source-note').textContent = `Page ${info.page}: ${compact.format(info.total)} auctions`;
   if (info.type === 'transactions') $('#source-note').textContent = `Page ${info.page}: ${compact.format(info.total)} sales`;
 });
-socket.on('scan:update', status => { renderStatus(status); if (state.view === 'overview') loadOverview(); else if (state.view === 'neural') loadPredictions(); else if (state.view === 'anomalies') loadAnomalies(); });
+socket.on('scan:update', status => {
+  renderStatus(status);
+  if (state.view === 'overview') { loadOverview(); loadAiPanel(); }
+  else if (state.view === 'neural') loadPredictions();
+  else if (state.view === 'anomalies') loadAnomalies();
+});
 socket.on('connect_error', () => { $('#feed-status').textContent = 'Reconnecting'; });
 
 const initial = location.hash.slice(1);
 if (titles[initial]) navigate(initial); else navigate('overview');
 loadOverview();
+loadAiPanel();

@@ -61,7 +61,17 @@ app.get('/api/market', (req, res) => {
 app.get('/api/market/:name', (req, res) => {
   const item = analyzer.buildMarket(state.auctions, state.transactions).find(x => x.name.toLowerCase() === req.params.name.toLowerCase());
   if (!item) return res.status(404).json({ error: 'Item not found' });
-  const listings = state.auctions.filter(x => x.itemName === item.name).sort((a, b) => a.pricePerUnit - b.pricePerUnit).slice(0, 20);
+  const rawListings = state.auctions.filter(x => x.itemName === item.name).sort((a, b) => a.pricePerUnit - b.pricePerUnit).slice(0, 30);
+  // Flag listings that sit outside the IQR keep-range so the UI can grey them out.
+  const rawPrices = rawListings.map(x => x.pricePerUnit);
+  let lo = -Infinity, hi = Infinity;
+  if (rawPrices.length >= 10) {
+    const sorted = [...rawPrices].sort((a, b) => a - b);
+    const pct = (arr, p) => { const i = (arr.length - 1) * p; const lo2 = Math.floor(i); return arr[lo2] + (arr[Math.ceil(i)] - arr[lo2]) * (i - lo2); };
+    const q1 = pct(sorted, 0.25), q3 = pct(sorted, 0.75), iqr = q3 - q1;
+    if (iqr > 0) { lo = q1 - 1.5 * iqr; hi = q3 + 1.5 * iqr; }
+  }
+  const listings = rawListings.map(x => ({ ...x, isOutlier: x.pricePerUnit < lo || x.pricePerUnit > hi }));
   const sales = state.transactions.filter(x => x.itemName === item.name).slice(0, 30);
   res.json({ item, listings, sales, history: analyzer.getHistory(item.name, 100) });
 });
@@ -151,10 +161,22 @@ app.post('/api/neural/train', asyncRoute(async (req, res) => {
   res.json({ ok: true, ...result });
 }));
 
+// Server-side cache: Groq is rate-limited, and Overview auto-refreshes on every scan.
+// Cache for 90s so concurrent tabs and scan bursts don't hammer the provider.
+let aiCache = { at: 0, body: null };
+const AI_TTL_MS = 90_000;
 app.post('/api/ai/analyze', asyncRoute(async (req, res) => {
+  const now = Date.now();
+  if (aiCache.body && now - aiCache.at < AI_TTL_MS) {
+    return res.json({ ...aiCache.body, cached: true, cachedAgeMs: now - aiCache.at });
+  }
+  if (!process.env.GROQ_API_KEY) return res.status(503).json({ error: 'AI not configured (missing GROQ_API_KEY)' });
   const intel = analyzer.getIntelligence(state.auctions, state.transactions);
+  const t0 = Date.now();
   const result = await ai.analyze(intel);
-  res.json({ response: result.content, model: result.model, usage: result.usage, neuralNetStats: intel.neuralNet });
+  const body = { response: result.content, model: result.model, usage: result.usage, neuralNetStats: intel.neuralNet, latencyMs: Date.now() - t0, cached: false };
+  aiCache = { at: now, body };
+  res.json(body);
 }));
 
 app.post('/api/ai/ask', asyncRoute(async (req, res) => {
