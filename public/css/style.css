@@ -1099,3 +1099,80 @@ td.mono {
   margin-top: 1px;
   letter-spacing: 0.04em;
 }
+
+/* De-clump: breathing room between stacked dashboard sections */
+.view > .hero + .metric-grid {
+  margin-top: 16px;
+}
+.view > .metric-grid + .panel,
+.view > .metric-grid + .dashboard-grid {
+  margin-top: 14px;
+}
+.view > .panel + .dashboard-grid,
+.view > .dashboard-grid + .dashboard-grid {
+  margin-top: 14px;
+}
+.dashboard-grid {
+  gap: 14px;
+}
+.panel {
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.15s ease;
+}
+.panel:hover {
+  border-color: #232840;
+}
+
+/* Smooth view switching — no pop */
+.view {
+  animation: viewFade 0.22s ease;
+}
+@keyframes viewFade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Smooth nav active state */
+.nav-link {
+  transition:
+    background 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+/* Unstyled fallbacks: these IDs had no real panel skin before */
+#ai-lines:empty:before,
+#ai-ask-answer:empty:before {
+  content: '—';
+  color: #5f6775;
+}
+.empty-message {
+  padding: 16px;
+  color: #5f6775;
+  font-size: 13px;
+  border: 1px dashed #1c2030;
+  border-radius: 10px;
+  background: #12151e;
+}
+.health-grid {
+  display: grid;
+  gap: 10px;
+}
+.health-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #1c2030;
+  border-radius: 10px;
+  background: #12151e;
+}
