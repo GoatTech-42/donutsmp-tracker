@@ -71,7 +71,6 @@ app.get('/api/transactions', (req, res) => {
   res.json({ transactions: rows.slice((page - 1) * limit, page * limit), total: rows.length, page, pages: Math.max(1, Math.ceil(rows.length / limit)) });
 });
 
-app.get('/api/portfolio', (req, res) => res.json(analyzer.calculatePortfolio(numberParam(req.query.budget, 5_000_000, 1_000, 1e15), state.auctions, state.transactions, numberParam(req.query.risk, 55, 10, 95))));
 app.get('/api/leaderboards/:type', asyncRoute(async (req, res) => res.json(await api.leaderboard(req.params.type, numberParam(req.query.page, 1, 1, 100)))));
 app.get('/api/player/:name', asyncRoute(async (req, res) => {
   if (!/^[A-Za-z0-9_]{1,36}$/.test(req.params.name)) return res.status(400).json({ error: 'Invalid player name' });
@@ -83,6 +82,11 @@ app.get('/api/player/:name', asyncRoute(async (req, res) => {
 app.get('/api/neural/stats', (req, res) => {
   const intel = analyzer.getIntelligence(state.auctions, state.transactions);
   res.json(intel.neuralNet);
+});
+
+app.get('/api/outliers', (req, res) => {
+  const outliers = analyzer.predictor.detectStatisticalOutliers(analyzer.priceHistoryMap, state.auctions);
+  res.json({ outliers, generatedAt: new Date().toISOString() });
 });
 
 app.get('/api/neural/predictions', (req, res) => {
@@ -102,17 +106,8 @@ app.post('/api/neural/train', asyncRoute(async (req, res) => {
 
 app.post('/api/ai/analyze', asyncRoute(async (req, res) => {
   const intel = analyzer.getIntelligence(state.auctions, state.transactions);
-  const nnStats = intel.neuralNet;
-  const context = JSON.stringify({ 
-    summary: intel.summary, 
-    topFlips: intel.topFlips, 
-    movers: intel.movers,
-    anomalies: intel.anomalies,
-    predictions: intel.predictions,
-    neuralNet: nnStats
-  }, null, 2);
-  const result = await ai.analyze(context, String(req.body?.prompt || '').slice(0, 2000));
-  res.json({ response: result.content, model: result.model, usage: result.usage, neuralNetStats: nnStats });
+  const result = await ai.analyze(intel);
+  res.json({ response: result.content, model: result.model, usage: result.usage, neuralNetStats: intel.neuralNet });
 }));
 
 app.post('/api/ai/ask', asyncRoute(async (req, res) => {
@@ -126,6 +121,12 @@ app.post('/api/ai/ask', asyncRoute(async (req, res) => {
     predictions: intel.predictions.slice(0, 5)
   });
   res.json({ response: await ai.quickInsight(question, nnContext) });
+}));
+
+app.post('/api/refresh', asyncRoute(async (req, res) => {
+  if (state.scanning) return res.json({ ok: true, message: 'Scan already in progress', status: publicStatus() });
+  runScan().catch(() => {});
+  res.json({ ok: true, message: 'Scan triggered', status: publicStatus() });
 }));
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'Endpoint not found' }));

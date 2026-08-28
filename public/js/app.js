@@ -1,4 +1,4 @@
-const state = { overview: null, flips: [], market: [], salesPage: 1, view: 'overview', nnPredictions: [], anomalies: [] };
+const state = { overview: null, flips: [], market: [], salesPage: 1, view: 'overview', nnPredictions: [], anomalies: [], itemName: null };
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&':'&','<':'<','>':'>',"'":''','"':'"' })[char]);
@@ -37,7 +37,6 @@ const titles = {
   anomalies:['ANOMALY DETECTION','Anomalies'],
   charts:['TECHNICAL ANALYSIS','Price charts'],
   item:['ITEM INTELLIGENCE','Item detail'],
-  portfolio:['RISK-ADJUSTED ALLOCATION','Portfolio lab'], 
   players:['PUBLIC PLAYER DATA','Player lookup'] 
 };
 function navigate(view) {
@@ -84,8 +83,9 @@ async function loadOverview() {
       ['Neural epochs', number.format(data.neuralNet?.pricePredictor?.epochs || 0), `Price loss: ${data.neuralNet?.pricePredictor?.lastLoss?.toFixed(4) || 'N/A'}`]
     ].map(x => `<div class="metric-card"><span class="label">${x[0]}</span><strong>${x[1]}</strong><small>${x[2]}</small></div>`).join('');
     $('#top-flips').classList.remove('loading-block');
-    $('#top-flips').innerHTML = data.topFlips.length ? data.topFlips.map(f => `<button class="opportunity-row text-button" data-open-flips="${escapeHtml(f.name)}"><div><div class="asset-name">${escapeHtml(f.name)}</div><span class="strategy">${f.type} · ${f.risk.label} risk</span></div><div><div class="profit">+${money(f.profit)}</div><div class="roi">${f.roi}% ROI</div></div></button>`).join('') : empty('No qualified opportunities yet.');
+    $('#top-flips').innerHTML = data.topFlips.length ? data.topFlips.map(f => `<button class="opportunity-row text-button" data-open-flips="${escapeHtml(f.name)}" data-open-item="${escapeHtml(f.name)}"><div><div class="asset-name">${escapeHtml(f.name)}</div><span class="strategy">${f.type} · ${f.risk.label} risk</span></div><div><div class="profit">+${money(f.profit)}</div><div class="roi">${f.roi}% ROI</div></div></button>`).join('') : empty('No qualified opportunities yet.');
     $$('[data-open-flips]').forEach(node => node.addEventListener('click', () => { navigate('opportunities'); $('#flip-search').value = node.dataset.openFlips; loadFlips(); }));
+    $$('[data-open-item]').forEach(node => node.addEventListener('click', (e) => { e.stopPropagation(); openItemDetail(node.dataset.openItem); }));
     $('#active-market').classList.remove('loading-block');
     $('#active-market').innerHTML = data.active.slice(0, 7).map(x => `<div class="compact-row"><span>${escapeHtml(x.name)}</span><b>${x.sales} sales</b><small>${money(x.salesValue)} turnover</small><small>${money(x.floor)} floor</small></div>`).join('') || empty('Waiting for sales data.');
     $('#movers').classList.remove('loading-block');
@@ -108,6 +108,14 @@ async function loadOverview() {
     
     // Training chart
     renderTrainingChart(nn?.pricePredictor?.lossHistory || []);
+    
+    // Statistical outliers
+    const outliersList = $('#outliers-list');
+    if (outliersList) {
+      outliersList.classList.remove('loading-block');
+      const outliers = data.outliers || [];
+      outliersList.innerHTML = outliers.length ? outliers.slice(0, 10).map(o => `<div class="compact-row"><span>${escapeHtml(o.name)}</span><b class="${o.deviation >= 0 ? 'up' : 'down'}">${o.deviation > 0 ? '+' : ''}${o.deviation}%</b><small>Z: ${o.zScore}</small><small>${o.iqrOutlier ? 'IQR flag' : ''}</small><small>${o.direction}</small><small>${o.sales} sales</small></div>`).join('') : empty('No statistical outliers detected.');
+    }
     
   } catch (error) { toast(error.message, true); }
 }
@@ -140,7 +148,8 @@ async function loadFlips() {
   try {
     const data = await request(`/api/flips?${params}`);
     state.flips = data.flips;
-    $('#flip-grid').innerHTML = data.flips.length ? data.flips.map(f => `<article class="flip-card"><div class="flip-top"><div><h3>${escapeHtml(f.name)}</h3><div style="margin-top:7px"><span class="badge">${f.type}</span> <span class="badge risk-${f.risk.label.toLowerCase()}">${f.risk.label} risk</span></div></div><div><div class="flip-profit">+${money(f.profit)}</div><div class="roi">${f.roi}% ROI</div></div></div><div class="flip-route"><div><small>Acquire</small><b>${money(f.buyPrice)}</b></div><i>→</i><div><small>Target</small><b>${money(f.sellPrice)}</b></div></div><div class="flip-meta"><span>${f.volume} observed sales</span><span>${f.confidence}% confidence</span><span>Score ${compact.format(f.score)}</span></div></article>`).join('') : empty('No opportunities match these filters.');
+    $('#flip-grid').innerHTML = data.flips.length ? data.flips.map(f => `<article class="flip-card" data-open-item="${escapeHtml(f.name)}" style="cursor:pointer"><div class="flip-top"><div><h3>${escapeHtml(f.name)}</h3><div style="margin-top:7px"><span class="badge">${f.type}</span> <span class="badge risk-${f.risk.label.toLowerCase()}">${f.risk.label} risk</span></div></div><div><div class="flip-profit">+${money(f.profit)}</div><div class="roi">${f.roi}% ROI</div></div></div><div class="flip-route"><div><small>Acquire</small><b>${money(f.buyPrice)}</b></div><i>→</i><div><small>Target</small><b>${money(f.sellPrice)}</b></div></div><div class="flip-meta"><span>${f.volume} observed sales</span><span>${f.confidence}% confidence</span><span>Score ${compact.format(f.score)}</span></div></article>`).join('') : empty('No opportunities match these filters.');
+    $$('#flip-grid [data-open-item]').forEach(node => node.addEventListener('click', () => openItemDetail(node.dataset.openItem)));
   } catch (error) { toast(error.message, true); }
 }
 
@@ -175,6 +184,12 @@ async function loadPredictions() {
     if (filter === 'high-conf') filtered = filtered.filter(p => p.confidence > 70);
     
     $('#nn-body').innerHTML = filtered.map(p => `<tr><td class="asset">${escapeHtml(p.name)}</td><td class="mono">${money(p.current)}</td><td class="mono">${money(p.predicted)}</td><td class="${p.change >= 0 ? 'up' : 'down'}">${p.change > 0 ? '+' : ''}${p.change}%</td><td><span class="badge">${p.trend}</span></td><td><div class="confidence" title="${p.confidence}% confidence"><i style="width:${p.confidence}%"></i></div></td><td>${p.change > 2 ? '🟢' : p.change < -2 ? '🔴' : '⚪'}</td></tr>`).join('') || `<tr><td colspan="7">No predictions match the filter.</td></tr>`;
+    
+    // Load training history for chart
+    try {
+      const history = await request('/api/neural/history');
+      renderTrainingChart(history.lossHistory || []);
+    } catch (_) {}
   } catch (error) { toast(error.message, true); }
 }
 
@@ -182,16 +197,14 @@ async function loadAnomalies() {
   try {
     const data = await request('/api/overview');
     state.anomalies = data.anomalies || [];
-    $('#anomalies-grid').innerHTML = state.anomalies.map(a => `<article class="flip-card"><div class="flip-top"><div><h3>${escapeHtml(a.item)}</h3><div style="margin-top:7px"><span class="badge">${a.type}</span> <span class="badge risk-high">${a.anomalyScore}% anomaly</span></div></div><div><div class="flip-profit ${a.deviation > 0 ? '' : 'negative'}">${a.deviation > 0 ? '+' : ''}${a.deviation}%</div></div></div><div class="flip-route"><div><small>Current</small><b>${money(a.currentPrice)}</b></div><i>→</i><div><small>Avg (10)</small><b>${money(a.avgPrice)}</b></div></div><div class="flip-meta"><span>${a.listings} active listings</span></div></article>`).join('') || empty('No anomalies detected. Market is stable.');
+    const outliers = data.outliers || [];
+    const all = [
+      ...state.anomalies.map(a => ({ ...a, source: 'neural' })),
+      ...outliers.map(o => ({ item: o.name, anomalyScore: Math.abs(o.zScore) * 30, currentPrice: o.price, avgPrice: o.avg, deviation: o.deviation, type: o.direction, listings: o.sales, source: 'statistical', zScore: o.zScore, iqrOutlier: o.iqrOutlier }))
+    ].sort((a, b) => (b.anomalyScore || 0) - (a.anomalyScore || 0));
+    
+    $('#anomalies-grid').innerHTML = all.map(a => `<article class="flip-card"><div class="flip-top"><div><h3>${escapeHtml(a.item)}</h3><div style="margin-top:7px"><span class="badge">${a.type}</span> <span class="badge risk-high">${a.anomalyScore}% anomaly</span> ${a.source === 'statistical' ? '<span class="badge">Z-score</span>' : '<span class="badge">Neural</span>'}</div></div><div><div class="flip-profit ${a.deviation > 0 ? '' : 'negative'}">${a.deviation > 0 ? '+' : ''}${a.deviation}%</div></div></div><div class="flip-route"><div><small>Current</small><b>${money(a.currentPrice)}</b></div><i>→</i><div><small>Avg (10)</small><b>${money(a.avgPrice)}</b></div></div><div class="flip-meta"><span>${a.listings} active listings</span>${a.zScore ? `<span>Z: ${a.zScore}</span>` : ''}${a.iqrOutlier ? '<span>IQR flag</span>' : ''}</div></article>`).join('') || empty('No anomalies detected. Market is stable.');
   } catch (error) { toast(error.message, true); }
-}
-
-async function calculatePortfolio() {
-  const button = $('#calculate-button'); button.disabled = true;
-  try {
-    const data = await request(`/api/portfolio?budget=${encodeURIComponent($('#budget').value)}&risk=${$('#risk').value}`);
-    $('#portfolio-results').innerHTML = `<div class="portfolio-summary">${[['Deployed',money(data.totalCost)],['Expected profit',money(data.totalProfit)],['Projected ROI',`${data.totalROI}%`],['Cash reserve',money(data.remaining)]].map(x => `<div class="metric-card"><span class="label">${x[0]}</span><strong>${x[1]}</strong></div>`).join('')}</div><div class="allocation">${data.allocation.map(x => `<div class="allocation-row"><div><small>Asset</small><b>${escapeHtml(x.flip.name)}</b></div><div><small>Strategy</small><b>${x.flip.type}</b></div><div><small>Units</small><b>${x.copies}</b></div><div><small>Capital</small><b>${money(x.totalCost)}</b></div><div><small>Profit</small><b class="up">+${money(x.expectedProfit)}</b></div></div>`).join('') || empty('No opportunities fit this capital and risk profile.')}</div>`;
-  } catch (error) { toast(error.message, true); } finally { button.disabled = false; }
 }
 
 async function lookupPlayer(event) {
@@ -294,23 +307,18 @@ function renderPriceChart(data) {
 }
 
 async function loadItemDetail() {
-  const hash = location.hash.slice(1);
-  if (hash === 'item') {
-    // Try to get item from market search or URL param
-    const urlParams = new URLSearchParams(window.location.search);
-    const itemName = urlParams.get('item');
-    if (!itemName) {
-      $('#item-title').textContent = 'Item detail';
-      $('#item-summary').innerHTML = empty('Navigate from Market explorer or use ?item=ItemName');
-      return;
-    }
-    try {
-      const data = await request(`/api/market/${encodeURIComponent(itemName)}`);
-      if (!data.item) throw new Error('Item not found');
-      renderItemDetail(data);
-    } catch (error) { 
-      $('#item-summary').innerHTML = empty('Item not found: ' + error.message); 
-    }
+  const itemName = state.itemName;
+  if (!itemName) {
+    $('#item-title').textContent = 'Item detail';
+    $('#item-summary').innerHTML = empty('Click an item in Market explorer or Opportunities');
+    return;
+  }
+  try {
+    const data = await request(`/api/market/${encodeURIComponent(itemName)}`);
+    if (!data.item) throw new Error('Item not found');
+    renderItemDetail(data);
+  } catch (error) { 
+    $('#item-summary').innerHTML = empty('Item not found: ' + error.message); 
   }
 }
 
@@ -362,6 +370,7 @@ function renderItemDetail(data) {
 
 // Navigate to item detail from market
 function openItemDetail(name) {
+  state.itemName = name;
   navigate('item');
   setTimeout(() => loadItemDetail(), 50);
 }
@@ -388,9 +397,8 @@ $('#market-search').addEventListener('input', debounce(loadMarket)); $('#market-
 $('#sales-search').addEventListener('input', debounce(() => loadSales(1)));
 $('#nn-filter').addEventListener('change', loadPredictions);
 $('#nn-search').addEventListener('input', debounce(loadPredictions));
-$('#risk').addEventListener('input', event => $('#risk-value').textContent = event.target.value);
-$('#calculate-button').addEventListener('click', calculatePortfolio); $('#player-form').addEventListener('submit', lookupPlayer);
-$('#refresh-button').addEventListener('click', async () => { const button = $('#refresh-button'); button.disabled = true; try { await request('/api/scan', { method:'POST' }); await loadOverview(); toast('Market feed refreshed'); } catch (error) { toast(error.message, true); } finally { button.disabled = false; } });
+$('#player-form').addEventListener('submit', lookupPlayer);
+$('#refresh-button').addEventListener('click', async () => { const button = $('#refresh-button'); button.disabled = true; button.textContent = '⟳ Scanning…'; try { await request('/api/refresh', { method:'POST' }); toast('Scan triggered — feed will update shortly'); } catch (error) { toast(error.message, true); } finally { button.disabled = false; button.textContent = '↻ Refresh feed'; } });
 
 const socket = io();
 socket.on('scan:status', renderStatus);

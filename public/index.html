@@ -28,7 +28,6 @@
         <button class="nav-link" data-view="anomalies"><span class="icon">⚡</span>Anomalies</button>
         <button class="nav-link" data-view="charts"><span class="icon">📈</span>Price charts</button>
         <p class="nav-label">Research</p>
-        <button class="nav-link" data-view="portfolio"><span class="icon">◈</span>Portfolio lab</button>
         <button class="nav-link" data-view="players"><span class="icon">◎</span>Player lookup</button>
       </nav>
       <div class="source-card">
@@ -61,6 +60,9 @@
           <article class="panel span-2"><div class="panel-head"><div><span class="kicker">Neural network forecast</span><h3>24h price predictions</h3></div></div><div id="predictions" class="compact-list loading-block"></div></article>
           <article class="panel"><div class="panel-head"><div><span class="kicker">Model performance</span><h3>Neural net status</h3></div></div><div id="nn-status" class="compact-list loading-block"></div></article>
         </div>
+        <div class="dashboard-grid" style="margin-top:12px">
+          <article class="panel span-2"><div class="panel-head"><div><span class="kicker">Statistical outliers</span><h3>Price outliers (Z-score & IQR)</h3></div></div><div id="outliers-list" class="compact-list loading-block"></div></article>
+        </div>
       </section>
 
       <section id="view-opportunities" class="view">
@@ -85,18 +87,12 @@
         <div class="section-intro"><div><span class="kicker">Neural network forecast</span><h2>24h price predictions</h2><p>Models trained on historical auction data. Confidence-weighted predictions updated every scan.</p></div></div>
         <div class="toolbar"><label class="search-field">⌕<input id="nn-search" placeholder="Search predictions"></label><select id="nn-filter"><option value="all">All predictions</option><option value="up">Trending up</option><option value="down">Trending down</option><option value="high-conf">High confidence (>70%)</option></select></div>
         <div class="table-panel"><table><thead><tr><th>Asset</th><th>Current</th><th>Predicted (24h)</th><th>Change</th><th>Trend</th><th>Confidence</th><th>Signal</th></tr></thead><tbody id="nn-body"></tbody></table></div>
-        <div class="panel" style="margin-top:12px"><div class="panel-head"><h3>Training history</h3></div><div id="training-chart" style="height:120px;background:#10131a;border-radius:9px;display:flex;align-items:flex-end;padding:10px;gap:2px"></div></article>
+        <div class="panel" style="margin-top:12px"><div class="panel-head"><h3>Training history</h3></div><div id="training-chart" style="height:120px;background:#10131a;border-radius:9px;display:flex;align-items:flex-end;padding:10px;gap:2px"></div></div>
       </section>
 
       <section id="view-anomalies" class="view">
         <div class="section-intro"><div><span class="kicker">Anomaly detection</span><h2>Market anomalies</h2><p>Items with statistically unusual price movements detected by the anomaly detection model.</p></div></div>
         <div class="cards-grid" id="anomalies-grid"></div>
-      </section>
-
-      <section id="view-portfolio" class="view">
-        <div class="section-intro"><div><span class="kicker">Capital allocation</span><h2>Portfolio lab</h2><p>Build a diversified basket with per-position caps and risk controls.</p></div></div>
-        <div class="lab-controls"><label>Available capital<input id="budget" type="number" min="1000" value="5000000"></label><label>Risk ceiling <b id="risk-value">55</b><input id="risk" type="range" min="10" max="95" value="55"></label><button class="button primary" id="calculate-button">Build portfolio</button></div>
-        <div id="portfolio-results"></div>
       </section>
 
       <section id="view-players" class="view">
