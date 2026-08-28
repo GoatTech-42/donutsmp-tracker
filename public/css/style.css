@@ -995,3 +995,107 @@ td.mono {
   background: #2a0d0d;
   color: #f87171;
 }
+
+/* Polish v4: hand-crafted overrides — keep at end so they win */
+.mono-list {
+  white-space: pre-wrap;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.mono-list.loading-block {
+  min-height: 44px;
+}
+.meta {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #737b8c;
+}
+.ai-ask {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+}
+.ai-ask input {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #1c2030;
+  background: #161a25;
+  color: #f0f2f8;
+}
+.button-sm {
+  font-size: 12px;
+  padding: 6px 12px;
+}
+.panel-wide {
+  grid-column: span 2;
+}
+.dashboard-grid--2 {
+  margin-top: 12px;
+}
+.training-chart {
+  height: 120px;
+  background: #10131a;
+  border-radius: 9px;
+  display: flex;
+  align-items: flex-end;
+  padding: 10px;
+  gap: 2px;
+}
+.hero {
+  min-height: 220px;
+  background:
+    radial-gradient(circle at 82% 50%, #404ebf18 0, transparent 30%),
+    linear-gradient(135deg, #161a25, #12151e);
+  border: 1px solid #1c2030;
+  border-radius: 18px;
+  padding: 34px 40px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  overflow: hidden;
+  position: relative;
+}
+.hero:before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(#ffffff04 1px, transparent 1px), linear-gradient(90deg, #ffffff04 1px, transparent 1px);
+  background-size: 34px 34px;
+  mask-image: linear-gradient(90deg, transparent, black);
+}
+.hero > div {
+  position: relative;
+}
+.hero h2 {
+  font: 600 38px/1.05 'Space Grotesk';
+  letter-spacing: -0.04em;
+  margin: 8px 0 10px;
+}
+.hero p {
+  max-width: 540px;
+  color: #7e8695;
+  line-height: 1.6;
+  margin: 0;
+  font-size: 13px;
+}
+.hero-copy .kicker {
+  color: #5563d1;
+}
+.topbar-title .eyebrow {
+  margin: 0;
+  color: #737b8c;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+.brand-text small {
+  display: block;
+  color: #697181;
+  font-size: 10px;
+  margin-top: 1px;
+  letter-spacing: 0.04em;
+}

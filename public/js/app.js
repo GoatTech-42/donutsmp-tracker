@@ -75,15 +75,15 @@ function sparkline(values, color = '#404ebf', w = 60, h = 20) {
 }
 
 const titles = {
-  overview: ['MARKET COMMAND CENTER', 'Overview'],
-  opportunities: ['ACTIONABLE SIGNALS', 'Opportunities'],
-  market: ['PRICE DISCOVERY', 'Market explorer'],
-  sales: ['COMPLETED TRADES', 'Sales ledger'],
-  neural: ['NEURAL FORECAST', 'Neural predictions'],
-  anomalies: ['ANOMALY DETECTION', 'Anomalies'],
-  charts: ['TECHNICAL ANALYSIS', 'Price charts'],
-  item: ['ITEM INTELLIGENCE', 'Item detail'],
-  players: ['PUBLIC PLAYER DATA', 'Player lookup']
+  overview: ['Pulse', 'Overview'],
+  opportunities: ['Filtered', 'Opportunities'],
+  market: ['Fair value', 'Explorer'],
+  sales: ['Proof of price', 'Sales'],
+  neural: ['Forecast', 'Neural'],
+  anomalies: ['Anomaly', 'Anomalies'],
+  charts: ['History', 'Charts'],
+  item: ['Item', 'Item detail'],
+  players: ['Public', 'Players']
 }
 function navigate(view) {
   state.view = view
