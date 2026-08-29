@@ -1,10 +1,15 @@
 FROM node:20-slim
 WORKDIR /app
-ENV NODE_ENV=production
+ENV NODE_ENV=production \
+    NODE_OPTIONS="--max-old-space-size=512 --expose-gc" \
+    DB_PATH=/app/data/pulse.db
 COPY package.json package-lock.json* ./
 RUN npm install --omit=dev
-COPY . .
-RUN mkdir -p /app/data && chown -R node:node /app
+# Copy each lib file individually — Docker's COPY handles .dockerignore properly
+COPY lib/ ./lib/
+COPY public/ ./public/
+COPY server.js ./
+RUN mkdir -p /app/data && chown -R node:node /app/data
 VOLUME ["/app/data"]
 USER node
 EXPOSE 3001
