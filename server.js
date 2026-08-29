@@ -349,7 +349,13 @@ async function runScan() {
     const onProgress = info => io.emit('scan:progress', { ...info, status: publicStatus() })
     // Publish partial auction state every ~20 pages so the dashboard never sits on
     // "0 auctions" for 8 minutes. Previous scan's data stays visible until replaced.
-    const onAuctionPartial = () => io.emit('scan:partial', publicStatus())
+    const onAuctionPartial = rows => {
+      // Cap to last 5K so RAM stays bounded during a long auction fetch.
+      // Analyzer has the full history in SQLite; this is just for live API.
+      const KEEP = 5000
+      state.auctions = rows.length > KEEP ? rows.slice(-KEEP) : rows
+      io.emit('scan:partial', publicStatus())
+    }
     auctions = await api.fetchAllAuctions(9999, onProgress, onAuctionPartial)
     if (auctions.length >= 500) {
       // Let the analyzer start building priceHistory even before transactions arrive,
