@@ -349,11 +349,7 @@ async function runScan() {
     const onProgress = info => io.emit('scan:progress', { ...info, status: publicStatus() })
     // Publish partial auction state every ~20 pages so the dashboard never sits on
     // "0 auctions" for 8 minutes. Previous scan's data stays visible until replaced.
-    const onAuctionPartial = rows => {
-      if (rows.length < 500) return
-      state.auctions = rows.slice()
-      io.emit('scan:partial', publicStatus())
-    }
+    const onAuctionPartial = () => io.emit('scan:partial', publicStatus())
     auctions = await api.fetchAllAuctions(9999, onProgress, onAuctionPartial)
     if (auctions.length >= 500) {
       // Let the analyzer start building priceHistory even before transactions arrive,
@@ -365,8 +361,11 @@ async function runScan() {
     }
     transactions = await api.fetchTransactions(9999, onProgress)
     if (!auctions.length) throw new Error('Upstream returned no auctions')
-    state.auctions = auctions
-    state.transactions = transactions
+    // Cap in-memory raw rows — analyzer's SQLite snapshot has the full history;
+    // these are only needed by live API endpoints while a scan runs.
+    const KEEP = 5000
+    state.auctions = auctions.length > KEEP ? auctions.slice(-KEEP) : auctions
+    state.transactions = transactions.length > KEEP ? transactions.slice(-KEEP) : transactions
     state.scanCount += 1
     state.lastSuccess = new Date().toISOString()
     state.lastError = null
@@ -380,6 +379,11 @@ async function runScan() {
       } catch (e) {
         console.warn('[Storage] Flip save failed:', e.message)
       }
+    }
+    if (typeof global.gc === 'function') {
+      try {
+        global.gc()
+      } catch (_) {}
     }
   } catch (error) {
     state.lastError = error.message
