@@ -157,7 +157,7 @@ async function loadOverview() {
       )
       .join('')
 
-    const midScanNoSales = data.status.scanning && data.summary.recordedSales === 0
+    const midScanNoSales = data.summary.recordedSales === 0
     if (midScanNoSales) {
       $('#top-flips').classList.remove('loading-block')
       $('#top-flips').innerHTML =
