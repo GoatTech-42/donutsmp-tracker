@@ -926,6 +926,24 @@ socket.on('connect_error', () => {
   if (el) el.textContent = 'Reconnecting'
 })
 
+// Auto-refresh active view every 45s even without a push — keeps the board live while you stare at it
+setInterval(() => {
+  if (document.hidden) return
+  if (state.view === 'overview') {
+    loadOverview()
+    loadAiPanel()
+  } else if (state.view === 'neural') loadNeural()
+  else if (state.view === 'opportunities') loadOpportunities()
+  else if (state.view === 'market') loadMarket()
+  else if (state.view === 'sales') loadSales(state.salesPage || 1)
+}, 45000)
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) {
+    if (state.view === 'overview') loadOverview()
+    else if (state.view === 'neural') loadNeural()
+  }
+})
+
 /* ---------- BOOT ---------- */
 const initial = location.hash.slice(1)
 if (titles[initial]) navigate(initial)
