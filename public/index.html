@@ -51,7 +51,6 @@
 
           <p class="nav-label">Intelligence</p>
           <button class="nav-link" data-view="neural">Neural</button>
-          <button class="nav-link" data-view="anomalies">Anomalies</button>
           <button class="nav-link" data-view="charts">Charts</button>
 
           <p class="nav-label">Lookup</p>
@@ -267,11 +266,21 @@
             <p>Predicts 24h price moves. Trains on every scan completion.</p>
           </header>
 
+          <div class="brain-wrap card">
+            <svg
+              id="brain-svg"
+              viewBox="0 0 640 280"
+              preserveAspectRatio="xMidYMid meet"
+              aria-label="Neural network"
+            ></svg>
+            <div id="brain-legend" class="brain-legend"></div>
+          </div>
+
           <div class="neural-grid">
-            <article class="card span-2">
+            <article class="card">
               <header>
                 <span class="eyebrow">Live</span>
-                <strong>Training activity</strong>
+                <strong>Training</strong>
               </header>
               <div id="nn-live" class="nn-live"></div>
             </article>
@@ -286,10 +295,10 @@
 
             <article class="card">
               <header>
-                <span class="eyebrow">Architecture</span>
-                <strong>Net layers</strong>
+                <span class="eyebrow">Signals</span>
+                <strong>Outliers feeding training</strong>
               </header>
-              <div id="nn-arch" class="nn-arch"></div>
+              <div id="nn-signals" class="list"></div>
             </article>
           </div>
 
@@ -317,16 +326,6 @@
               <tbody id="nn-body"></tbody>
             </table>
           </div>
-        </section>
-
-        <!-- ANOMALIES -->
-        <section id="view-anomalies" class="view" data-view="anomalies">
-          <header class="page-header">
-            <span class="eyebrow">Outliers</span>
-            <h2>Anomalies</h2>
-            <p>Statistically unusual price moves (Z-score &gt; 2 or IQR).</p>
-          </header>
-          <div id="anomalies-grid" class="anomaly-grid"></div>
         </section>
 
         <!-- CHARTS -->

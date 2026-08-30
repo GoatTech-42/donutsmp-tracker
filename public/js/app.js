@@ -77,12 +77,15 @@ function navigate(view) {
   $('#page-eyebrow').textContent = titles[view][0]
   $('#page-title').textContent = titles[view][1]
   history.replaceState(null, '', '#' + view)
+  if (view === 'anomalies') {
+    view = 'neural'
+    history.replaceState(null, '', '#neural')
+  }
   // Lazy-load the active view
   if (view === 'opportunities') loadOpportunities()
   else if (view === 'market') loadMarket()
   else if (view === 'sales') loadSales()
   else if (view === 'neural') loadNeural()
-  else if (view === 'anomalies') loadAnomalies()
   else if (view === 'charts') loadCharts()
   else if (view === 'players') {
   }
@@ -417,13 +420,86 @@ $('#sales-search')?.addEventListener(
   debounce(() => loadSales(1), 300)
 )
 
-/* ---------- NEURAL (always-training live view) ---------- */
+/* ---------- NEURAL (visual network) ---------- */
+function drawBrain(data) {
+  const svg = $('#brain-svg')
+  if (!svg) return
+  const nn = data.neuralNet || {}
+  const outliers = data.outliers || []
+  const W = 640, H = 280
+  const layers = [
+    { n: 8, x: 60, label: '32 features' },
+    { n: 12, x: 220, label: '48 · ReLU' },
+    { n: 6, x: 400, label: '24 · ReLU' },
+    { n: 1, x: 560, label: 'price' }
+  ]
+  const trendLayer = { n: 3, x: 560, yOff: 90, label: 'trend' }
+  // Deterministic pseudo-activation from lastLoss so the brain isn't static
+  const act = v => 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(v * 2.1))
+  const loss = nn.pricePredictor?.lastLoss || 0.08
+  const totalEp = (nn.pricePredictor?.epochs || 0) + (nn.trendPredictor?.epochs || 0) + (nn.anomalyDetector?.epochs || 0)
+  const pulsePhase = Date.now() / 700
+  let s = `<rect width="${W}" height="${H}" rx="12" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.07)"/>`
+  // Edges: sampled 22 thin lines with animated pulse
+  for (let li = 0; li < layers.length - 1; li++) {
+    const a = layers[li], b = layers[li + 1]
+    for (let i = 0; i < Math.min(3, a.n); i++) {
+      for (let j = 0; j < Math.min(3, b.n); j++) {
+        const y1 = H / 2 + (i - 1) * 26 - 6, y2 = H / 2 + (j - 0.5 * (b.n - 1)) * 22
+        const w = 0.45 + act(i * 1.7 + j * 2.3 + loss * 7) * 1.2
+        const op = 0.08 + act(i + j) * 0.18 + (totalEp ? 0.08 : 0)
+        const dash = Math.abs(Math.sin(pulsePhase + i + j * 0.7)) * 6
+        s += `<path d="M${a.x} ${y1} C${(a.x + b.x) / 2} ${y1},${(a.x + b.x) / 2} ${y2},${b.x} ${y2}" stroke="rgba(64,78,191,${op.toFixed(2)})" stroke-width="${w.toFixed(2)}" fill="none" stroke-dasharray="${dash.toFixed(1)} 18" opacity="0.95"/>`
+      }
+    }
+  }
+  // Trend branch edges
+  const midY = H / 2
+  for (let j = 0; j < trendLayer.n; j++) {
+    const y2 = midY + trendLayer.yOff + (j - 1) * 18
+    const y1 = midY - 14
+    s += `<path d="M${layers[2].x} ${y1} C${(layers[2].x + trendLayer.x) / 2} ${y1},${(layers[2].x + trendLayer.x) / 2} ${y2},${trendLayer.x} ${y2}" stroke="rgba(99,102,241,0.22)" stroke-width="0.9" fill="none"/>`
+  }
+  // Neurons
+  for (const ly of layers) {
+    for (let i = 0; i < ly.n; i++) {
+      const y = H / 2 + (i - (ly.n - 1) / 2) * 22
+      const a = act(ly.x * 0.01 + i * 0.9 + loss * 3)
+      const fill = ly.x === 560 ? `rgba(64,78,191,${(0.55 + a * 0.4).toFixed(2)})` : `rgba(255,255,255,${(0.18 + a * 0.55).toFixed(2)})`
+      const r = ly.x === 560 ? 7 : 5
+      s += `<circle cx="${ly.x}" cy="${y}" r="${r}" fill="${fill}" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>`
+    }
+    s += `<text x="${ly.x}" y="${H - 14}" text-anchor="middle" font-size="9" fill="#6c7388" font-family="JetBrains Mono">${ly.label}</text>`
+  }
+  for (let j = 0; j < trendLayer.n; j++) {
+    const y = midY + trendLayer.yOff + (j - 1) * 18
+    s += `<circle cx="${trendLayer.x}" cy="${y}" r="4.5" fill="rgba(99,102,241,0.55)" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>`
+  }
+  s += `<text x="${trendLayer.x}" y="${midY + trendLayer.yOff + 42}" text-anchor="middle" font-size="9" fill="#6c7388" font-family="JetBrains Mono">${trendLayer.label}</text>`
+  // Outlier ticks feeding back
+  if (outliers.length) {
+    const top = outliers.slice(0, 4)
+    s += `<g font-size="8" fill="#a0a8b8" font-family="JetBrains Mono">`
+    top.forEach((o, k) => {
+      const label = `${o.name.slice(0, 10)} Z${o.zScore}`
+      s += `<text x="8" y="${18 + k * 12}">${label} → training</text>`
+    })
+    s += `</g>`
+  }
+  svg.innerHTML = s
+  const legend = $('#brain-legend')
+  if (legend) {
+    const price = nn.pricePredictor || {}, trend = nn.trendPredictor || {}, anom = nn.anomalyDetector || {}
+    legend.innerHTML = `<span>${totalEp.toLocaleString()} epochs</span> · <span>price loss ${price.lastLoss?.toFixed(4) ?? '—'}</span> · <span>trend ${trend.epochs || 0}ep</span> · <span>anomaly ${anom.epochs || 0}ep</span> · <span>${outliers.length} outliers feeding replay</span>`
+  }
+}
 async function loadNeural() {
-  // Live training activity
+  // Live training strip — compact, no redundant arch panel
   const live = $('#nn-live')
   if (live) {
     try {
       const data = await api('/api/overview')
+      drawBrain(data)
       const nn = data.neuralNet || {}
       const price = nn.pricePredictor || {}
       const trend = nn.trendPredictor || {}
@@ -433,40 +509,24 @@ async function loadNeural() {
       const loss = price.lastLoss || 0
       const lossPct = loss ? Math.min(100, Math.max(0, 100 - Math.log10(loss + 1) * 20)) : 0
       const trainedPct = total ? Math.min(100, total * 0.1) : 0
+      const signals = (data.outliers || []).length
       live.innerHTML = `
         <div class="live-row"><span class="label"><span class="pulse"></span>Training</span><div class="bar"><span style="width:${trainedPct}%"></span></div><span class="value">${total.toLocaleString()} ep</span></div>
         <div class="live-row"><span class="label">Samples</span><div class="bar"><span style="width:${Math.min(100, samples / 50)}%"></span></div><span class="value">${fmtNum(samples)}</span></div>
-        <div class="live-row"><span class="label">Last loss</span><div class="bar"><span style="width:${lossPct}%"></span></div><span class="value">${loss.toFixed(4)}</span></div>
+        <div class="live-row"><span class="label">Last loss</span><div class="bar"><span style="width:${lossPct}%"></span></div><span class="value">${loss ? loss.toFixed(4) : '—'}</span></div>
+        <div class="live-row"><span class="label">Signals</span><div class="bar"><span style="width:${Math.min(100, signals * 8)}%"></span></div><span class="value">${signals} outliers → replay</span></div>
         <div class="live-row"><span class="label">Last update</span><div class="bar"></div><span class="value">${relative(nn.lastTraining)}</span></div>
       `
+      const sig = $('#nn-signals')
+      if (sig) {
+        const top = (data.outliers || []).slice(0, 5)
+        sig.innerHTML = top.length
+          ? top.map(o => `<div class="row"><span>${escHtml(o.name)}</span><span class="badge">Z ${o.zScore}</span><b class="${o.direction === 'overpriced' ? 'down' : 'up'}">${fmtPct(o.deviation)}</b><small>→ training</small></div>`).join('')
+          : `<div class="placeholder">No outlier signals this scan.</div>`
+      }
     } catch (e) {
       live.innerHTML = `<div class="placeholder">${e.message}</div>`
     }
-  }
-
-  // Architecture
-  const arch = $('#nn-arch')
-  if (arch) {
-    try {
-      const data = await api('/api/overview')
-      const nn = data.neuralNet || {}
-      const archStr = (
-        nn.architecture || [
-          'Input · 32 features',
-          'Dense · 48 neurons · ReLU',
-          'Dense · 24 neurons · ReLU',
-          'Output · 1 neuron · linear (price)',
-          'Output · 3 neurons · softmax (trend)',
-          'Output · 1 neuron · sigmoid (anomaly)'
-        ]
-      ).join('<br>')
-      arch.innerHTML = `
-        <div class="row"><span>Total params</span><b>${fmtNum((nn.pricePredictor?.params || 0) + (nn.trendPredictor?.params || 0))}</b></div>
-        <div class="row"><span>Optimizer</span><b>Adam (lr 0.004)</b></div>
-        <div class="row"><span>Loss</span><b>MSE / Cross-entropy</b></div>
-        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);color:var(--text-3)">${archStr}</div>
-      `
-    } catch (e) {}
   }
 
   // Loss chart
@@ -552,28 +612,7 @@ async function loadNeural() {
 $('#nn-search')?.addEventListener('input', debounce(loadNeural, 300))
 $('#nn-filter')?.addEventListener('change', loadNeural)
 
-/* ---------- ANOMALIES ---------- */
-async function loadAnomalies() {
-  const grid = $('#anomalies-grid')
-  if (!grid) return
-  grid.innerHTML = `<div class="placeholder">Loading…</div>`
-  try {
-    const data = await api('/api/overview')
-    const items = (data.outliers || []).slice().sort((a, b) => Math.abs(b.zScore) - Math.abs(a.zScore))
-    grid.innerHTML = items.length
-      ? items
-          .map(
-            o => `
-          <div class="flip-card" data-item="${escHtml(o.name)}">
-            <div class="name">${escHtml(o.name)}</div>
-            <div class="meta">Z-score ${o.zScore} · ${o.iqrOutlier ? 'IQR outlier' : 'statistical'}</div>
-            <div class="nums"><small>${fmtMoney(o.price)} vs ${fmtMoney(o.avg)}</small><b class="${o.direction === 'overpriced' ? 'up' : 'down'}">${fmtPct(o.deviation)}</b></div>
-            <div class="meta">${o.sales} sales · <span class="badge ${o.direction === 'overpriced' ? 'risk-high' : 'risk-low'}">${o.direction}</span></div>
-          </div>
-        `
-          )
-          .join('')
-      : `<div class="placeholder">No anomalies detected.</div>`
+/* ---------- ANOMALIES removed: merged into Neural signals ---------- */
     bindOpenItem('#anomalies-grid')
   } catch (e) {
     grid.innerHTML = `<div class="placeholder">${e.message}</div>`
