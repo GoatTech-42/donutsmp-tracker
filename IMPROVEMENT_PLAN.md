@@ -1,166 +1,75 @@
-# DonutSMP Tracker — Improvement Plan
+# v7 Plan — Both Dashboards Cosmos-Similar, Amazing (Aug 30)
 
-## What We Just Did (v2.1)
-- Removed Portfolio view (orders API doesn't exist)
-- Fixed refresh feed button (was calling nonexistent `/api/scan`, now `/api/refresh`)
-- Fixed ai.js triplicated functions (compact, request, buildMarketContext were copy-pasted 3x)
-- Added Z-score + IQR statistical outlier detection to neural network
-- Added `/api/outliers` endpoint
-- Added outlier panel to Overview + merged with Anomalies view
-- Fixed item detail navigation (was reading URL params that don't exist, now uses `state.itemName`)
-- Added click-to-detail on flip cards and market rows
-- Added training loss chart to Neural view
-- Anomaly detector now trains continuously alongside price/trend predictors
-- All changes use blue Cosmos theme (`#404ebf`)
+> Pulse and DonutFlayer feel like the same studio — Cosmos `glass` on `#141414`, blue `#404ebf` accent, hand-crafted icons. No AI tells.
 
-## What We Just Did (v2.2)
-- Experience replay buffer (500 samples) for neural network training stability
-- Training interval lowered to 60s for continuous learning
-- AI analyst: tighter one-liner format, better craft flip context
-- `/api/export` endpoint (JSON + CSV download)
-- Export button in topbar
-- Enchantment flip detection: buy base + enchantment book → enchanted item → sell
-- Enchantment badge on flip cards
-- CSS: sparkline, skeleton loader, scan-progress, badge risk styles
-- Scan progress bar in sidebar
-- Sequential batched fetching (BATCH_SIZE=1, PAGE_DELAY=280ms) for 250 req/min limit
-- Review cleanup (81 issues found, ~30 fixed)
-- Hand-crafted SVG logos (pulse heartbeat + T pickaxe → sharp PNG via `sharp`)
-- Accuracy probe: confirmed no `/worth` endpoint exists on DonutSMP API
+## Why this v7 replaces v6
 
-## v3 Plan — Accuracy, AI, Dashboard, RAM, Logos (Aug 28)
+- v6 covered tracker anomalies→neural integration + visual network, but Flayer was only "font parity". User now wants **full Flayer overhaul to match tracker** and **icons redesigned last** when everything works.
+- Server is still down (storage.js missing after bad scp, build context 603B ghost, VOLUME not persisting) — v6 Phase 1 fixes must stay first.
 
-### The Problem (diagnosed)
-- **Accuracy is the #1 complaint.** `buildMarket()` feeds raw ask prices (including troll listings like `$1.2B shulker_box`) into `floor = Math.min(..asks)`, `median`, `avg`, and `fairValue`. One troll item can tank `floor` or inflate `fairValue`. Auctions are asking prices, not real value — completed transactions are the only proof of what people actually pay. We have no server `/worth` to fall back on (probed every plausible endpoint; all 404).
-- **AI analyst one-liners are gone from the UI.** Backend `POST /api/ai/analyze` still works but no overview card calls it. Users see a dead panel.
-- **Dashboard is siloed.** 8 separate tab views; none show "a little of everything." User wants a live, always-refreshing command center, not a tab crawler.
-- **NN training is gated** behind `trainingInterval = 60s` and only fires inside `addSnapshot` — long gaps, missed signals.
-- **RAM is high.** Full scans pull 30k+ auctions + 1k transactions into memory, hold snapshots, and never GC-aggressively.
-- **Logos shipped as AI slop** (Pollinations PNGs). New minimalist SVGs are done locally but not yet the favicon.
+## Shared Design Language (both apps)
 
-### Phase A — Accuracy (do first; everything else depends on correct prices)
-| # | Change | Detail |
-|---|--------|--------|
-| A1 | IQR-filter asks before any stat | In `buildMarket`, compute Q1/Q3, drop prices outside `[Q1-1.5*IQR, Q3+1.5*IQR]` before `floor/median/avg/q1`. If only 1–2 listings, keep raw (not enough to judge). |
-| A2 | Transaction-anchored `fairValue` | If `salePrices.length >= 5`, `fairValue = median(salePrices)` (already does 3 — raise to 5 for confidence). If `< 5` sales, `fairValue = IQR-filtered median(asks)`, and mark `confidence` lower so flips don't pretend it's solid. |
-| A3 | Trimmed `floor` | `floor = min(IQR-filtered asks)` — ignore single-coin troll dumps and $1B memes. Expose both `floorRaw` and `floorFiltered` for debugging. |
-| A4 | Volatility from filtered data | Compute `volatility`/`avg` from the filtered set too. |
-| A5 | `/api/market/:name` outlier flag | Return `isOutlierListing` per listing so UI can grey-out junk. |
-| A6 | Flip confidence gate | Don't surface snipe flips where `sales < 2` and `confidence < 30` — they look profitable only because the market is noise. |
-| | **Success:** Auctions with 1 outlier + 5 normal listings no longer show floor = 1. `/api/market?sort=confidence` actually correlates with real liquidity. |
+- **Canvas:** `#141414` + `radial-gradient(ellipse at 20% 0%, rgba(64,78,191,.08))` wash, `glass: rgba(255,255,255,.06)` + `blur(12px)` cards, `border: rgba(255,255,255,.08)`, `--accent: #404ebf`, `--accent-glow: rgba(64,78,191,.25)`.
+- **Motion:** `fadeSlideUp 0.3s`, `glowPulse`, `pulse` on live dot, `active` nav = blue + `box-shadow: glow`.
+- **Nav:** 8 tracker views after trim (Overview, Opportunities, Explorer, Sales, Neural, Charts, Item, Players) — **drop Anomalies** as standalone; Flayer 3 views (Overview, Bots, Playground) mirrored sidebar, same brand SVG language.
+- **Type:** Space Grotesk numbers/titles, DM Sans body, JetBrains Mono money.
 
-### Phase B — AI + Neural (tight loop, no dead panels)
-| # | Change | Detail |
-|---|--------|--------|
-| B1 | Restore AI one-liner panel on Overview | Card at top of Overview: `AI Analyst — 5 one-liners`, auto-fetches `POST /api/ai/analyze` on load + after every scan. Show model + latency. Gracefully hides if `GROQ_API_KEY` missing. |
-| B2 | AI quick-ask stays (already on page) | Keep `POST /api/ai/ask` for ad-hoc "is X worth buying?" — surface as a small input under the panel. |
-| B3 | Continuous NN training | Remove the 60s gate. On every `addSnapshot`, if `history.length >= 15` for ≥5 items, do one short training pass (15–20 epochs) async so scans don't block. Keep `pricePredictor`, `trendPredictor`, `anomalyDetector` + experience replay. |
-| B4 | Live training indicator | Tiny sparkline + "trained 3s ago · loss 0.041" in the Overview's `nn-status` card, updates via socket. |
-| | **Success:** Visiting Overview shows fresh AI picks within 2s of scan completion; NN loss visibly ticks down across scans. |
+## Phases — one commit each, Playwright green before next, push before deploy
 
-### Phase C — Dashboard "a little of everything, constantly"
-| # | Change | Detail |
-|---|--------|--------|
-| C1 | Overview becomes the real dashboard | Keep tab views but make Overview dense: (1) AI one-liners, (2) top 5 flips, (3) active market pulse (7), (4) movers (7), (5) NN predictions (8), (6) NN status + training chart, (7) outliers (8), (8) data health, (9) live event ticker (last 10 auction/transaction events via socket). No scrolling through tabs to "see what's happening." |
-| C2 | Socket fanout for everything | `scan:progress` already exists; add `market:tick` after each scan with `{ summary, topFlips, movers, predictions }` so Overview refreshes without full reload. Other tabs still lazy-load. |
-| C3 | Auto-refresh Overview on `scan:update` | Already wired; keep it, but make it swap content without the loading shimmer so it feels live, not janky. |
-| | **Success:** One screen answers "what should I flip right now, is it safe, and what does the AI think?" without clicking a tab. |
+### Phase 1 — Unblock deploy (server is down)
 
-### Phase D — Lower RAM
-| # | Change | Detail |
-|---|--------|--------|
-| D1 | Node GC + heap cap | `Dockerfile` `CMD` → `node --max-old-space-size=768 --expose-gc server.js`. In `server.js`, call `global.gc()` after each scan if exposed. Document env override `NODE_OPTIONS`. |
-| D2 | Don't hold raw 30k auctions in `analyzer.snapshots` | `snapshots[].items` already stores compact per-item stats; stop storing `lastAuctions` as a full 30k array — keep only the grouped/market summary. Provide `state.auctionCount` instead of `state.auctions.length` where needed. |
-| D3 | SQLite: cap + WAL | Already `WAL + cache_size -32768`; add `PRAGMA temp_store = MEMORY` and keep `cleanup(30)` aggressive. |
-| D4 | Batch delay slightly higher if RAM-constrained | Keep `BATCH_SIZE=1, PAGE_DELAY=280` but allow env `API_PAGE_DELAY` so low-RAM VPS can go 400ms without code change. |
-| | **Success:** `docker stats` shows tracker under ~700 MB RSS during scans; no OOM on 1 GB VPS. |
+1. Fix `storage.js` missing: `scp` whole `lib/` as tar, verify `lsattr -e` cleared, `docker build --no-cache` includes `lib/`.
+2. Fix Dockerfile: `VOLUME ["/app/data"]` + `chown -R node:node /app/data` + `USER node` after.
+3. Fix env: run with `-v pulse-data:/app/data` and explicit `-e DONUTSMP_API_KEY... -e GROQ_API_KEY... -e GROQ_MODEL=qwen/qwen3.8-27b` (no `.env` file on host).
+4. Keep `PAGE_DELAY 900ms` + 8-batch rate-limit cutoff — don't regress.
 
-### Phase E — Logos (final)
-| # | Change | Detail |
-|---|--------|--------|
-| E1 | Replace Pollinations PNGs with the new minimalist SVGs | `logos/pulse-logo.svg` (heartbeat line) + `logos/donutflayer-logo.svg` (T pickaxe), both blue `#404ebf→#5563d1`. Use `sharp` to render 512 + 64 PNG. Set as `/favicon.png` and `/public/*-logo.png`. Also update the inline brand-mark SVGs to match. |
-| E2 | Ship OG image | Use the 512 PNG as `og:image` via `<meta property="og:image" content="/pulse-logo.png">`. |
-| | **Success:** Favicon + brand icon are the same clean shape at every size; no fuzzy AI artifact. |
+**Prove:** `curl /api/health` → `status:ok`, `curl /api/transactions` → paginates, `docker logs --tail` no `MODULE_NOT_FOUND` nor `SQLITE_CANTOPEN`.
 
-### Execution Order
-1. Phase A (accuracy) — blocks meaningful testing of everything else
-2. Phase B (AI + continuous training)
-3. Phase C (dashboard density)
-4. Phase D (RAM)
-5. Phase E (logos)
+### Phase 2 — Tracker streamlining (keep only useful)
 
-Estimated: A+B ~2 commits, C+D+E ~1 commit each. All pushed locally first, then `scp` + `docker build --no-cache` + `docker run` to `192.168.0.240`.
+- Keep: Overview · Opportunities · Explorer · Sales · Neural · Charts · Item · Players
+- Remove: **Anomalies** tab/view/route/CSS. Data (Z>2/IQR + model `anomalyScore`) moves into Neural as "signals" strip — not a dead page.
+- Keep 301 fallback: `navigate('anomalies')` → `navigate('neural')`.
 
-### Risks
-- IQR filtering too aggressive on thin markets (1–3 listings) — mitigated by falling back to raw when `asks.length < 4`.
-- No `/worth` means we can never be "authoritative" — we explicitly show `confidence` and `sales` so users know when a price is thin.
+### Phase 3 — Tracker Neural visual (the big one)
 
-## What's Next
+- **Top:** SVG brain — sampled 8 input dots → 12 → 6 → 1 (price) + 3 (trend) branches, animated edge glow on `scan:update`, weight thickness = abs(weight), neuron fill = activation for strongest prediction.
+- **Middle:** Live strip — epoch counter, lastLoss sparkline (Chart.js canvas), `trainingSamples` + `lastTraining` relative, `mae/dirAccuracy` from `MarketPredictor.lastEval`.
+- **Bottom:** Predictions table trimmed to `Item | Current | Predicted | Change | Trend | Conf` (no redundant `Signal` dup).
+- Anomalies feed: up-sample Z>2 windows into next `train()` so outliers train the detector faster; show "N outliers → +M replay" in the strip.
 
-### Phase 1: Data Coverage (immediate)
-- [ ] Add smelting/furnace/campfire/smoker/blast furnace recipes (PrismarineJS doesn't differentiate these)
-- [ ] Add stonecutter, smithing table, loom, cartography recipes
-- [ ] Map all PrismarineJS item IDs to DonutSMP display names
-- [ ] Track all 1255 vanilla items + DonutSMP custom items
+### Phase 4 — Tracker correctness deep fix
 
-### Phase 2: Neural Network (this week)
-- [x] Experience replay buffer for training stability
-- [ ] Add LSTM/GRU temporal layers for better sequence prediction
-- [ ] Multi-horizon predictions (1h, 6h, 24h, 7d)
-- [ ] Uncertainty quantification (prediction intervals)
-- [ ] Adversarial validation for distribution shift detection
-- [ ] Model checkpointing + rollback on degradation
+1. Enchantment-aware: already `variantKey()` + `isEnchanted` — surface `+12%` badge in Explorer / Item detail / Overview `topFlips`.
+2. Low-risk first: Opportunities sort `Low→Medium→High` then `confidence` (already), Overview "Best flips (low risk first)" header explicit.
+3. Smooth/unstyled: `viewFade`, `board-refresh` without shimmer, health-grid styled, empty-states with dashed border — already `82933b9` but carry to Neural SVG.
 
-### Phase 3: Intelligence (this week)
-- [x] Enchantment flip calculation (buy base + books → enchant → sell)
-- [ ] Cross-market arbitrage detection
-- [ ] Multi-step craft chain optimization (recursive)
-- [ ] Shulker box arbitrage (buy contents → box → sell)
-- [ ] Whale tracking (large buyer/seller patterns)
-- [ ] Time-of-day pricing patterns
-- [ ] Kelly Criterion position sizing per flip
+### Phase 5 — Flayer full overhaul (match tracker)
 
-### Phase 4: Visualization (next week)
-- [ ] Real-time WebSocket charts (live price updates)
-- [ ] Volume bars on price charts
-- [ ] Technical indicator overlays (RSI, MACD, Bollinger Bands)
-- [ ] Neural prediction confidence bands
-- [ ] Anomaly timeline view
-- [ ] Enchantment premium heatmap
-- [ ] Training loss curve (real-time)
+- Mirror tracker's shell: `app-shell` grid 240px sidebar + `view.active` routing, same `panel`/`metric-card`/`flip-card`玻璃, same topbar (`pill` + `Export`/`Refresh`).
+- Keep mineflayer fixes already shipped: `pathfinder` plugin loaded, `bot.dig(block)` fix, cached `require` at module level, `AUTH_FOLDER` env, reconnects start at 0, interval leak guards, `endsWith('_ore'/_log')`, `AUTH_FOLDER` + `minecraft-data` dep.
+- Fix remaining: `bot.nerestEntity` mount race, `health/food` live via `bot.on('health')`, chat `slice(0,256)`, `findBlock` count per tick capped, `Movements` created once not per mine tick.
+- Add live board: bot cards show mode/health/pos with pulse dot + `scan:progress` style bar for pathfinder.
 
-### Phase 5: Reliability (next week)
-- [ ] Health checks with diagnostics
-- [ ] Graceful degradation (demo mode if API down)
-- [ ] Groq key rotation + failover
-- [ ] Database backup + point-in-time recovery
-- [ ] Structured logging
-- [ ] API documentation (OpenAPI)
+### Phase 6 — Icons (when EVERYTHING works)
 
-### Phase 6: AI (month 2)
-- [ ] Structured JSON output from AI analyst
-- [ ] Chain-of-thought for complex multi-step flips
-- [ ] Self-consistency (run multiple times, vote)
-- [ ] Feedback loop (user confirms/rejects flips → trains reward model)
-- [ ] RAG: embed historical market reports for context
+- Hand-crafted SVG, `sharp` render 512/64 PNG — **not** Pollinations.
+- Pulse: heartbeat spike `M4 18 H11 L13 10 L15 26 L18 5 L21 23 L23 15 H32` on `rx=10` `linearGradient #5563d1→#404ebf` square.
+- Flayer: geometric T-pickaxe `17×3` head + 22px handle, 1px grip gaps, same gradient.
+- Ship as `/favicon.png` + `/pulse-logo.png` + `og:image` in both. Last commit so cache-bust `?v=6` lands together.
 
-### Phase 7: Advanced (month 2+)
-- [ ] Auto-buy/auto-sell via bot integration
-- [ ] Smart relisting based on competition
-- [ ] Demand forecasting for farmable items
-- [ ] Update/patch impact prediction
-- [ ] Public flip leaderboard
-- [ ] Strategy sharing (anonymized)
+### Phase 7 — Playwright + monitor + efficiency
 
-## Success Metrics
-| Metric | Target |
-|--------|--------|
-| Scan coverage | 100% of active auctions + transactions |
-| Recipe coverage | 100% vanilla + DonutSMP custom |
-| Enchantment tracking | 100% vanilla enchants + combos |
-| Neural training | Continuous (every scan) |
-| Model accuracy (24h) | >70% directional accuracy |
-| Flip detection | >95% of profitable flips found |
-| AI quality | >90% actionable, <5% hallucination |
-| Uptime | 99.9% |
-| API latency (p95) | <500ms |
+- `tests/e2e.spec.js`: Overview renders 12 flips, Explorer search, Neural SVG + loss canvas present, no `addEventListener(null)` console errors, no `429` after 900ms fix, Flayer bot create/stop/mount.
+- Deploy via direct `scp lib/ → /opt/donutsmp-tracker/lib/` + `docker build --no-cache` (verified `ls -la /app/lib` non-empty before `docker run`).
+- Monitor 10 min: `docker stats` tracker < 410 MiB, flayer < 120 MiB, `scanCount` ticks, `/api/health` stays `live`.
+
+## Execution order
+
+1 → 2 → 3 → 4 → 5 → 6 → 7. Each pushes `origin/main`, then `scp → /opt/... → build → run -p 4201:3001 / 4202:3000 → curl /api/health → playwright` before next. `deploy-tracker.sh` / `deploy-flayer.sh` committed at the end.
+
+## Risks
+
+- Removing anomalies breaks `#anomalies` links → fallback keeps them valid.
+- SVG sampling 8/12/6 keeps DOM cheap; full 32→48→24 trains underneath unseen.
+- `pulse-data` and `flayer-auth` volumes must exist (`docker volume create` already did).
