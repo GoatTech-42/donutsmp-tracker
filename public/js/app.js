@@ -90,11 +90,11 @@ function navigate(view) {
 
 $$('.nav-link').forEach(node => node.addEventListener('click', () => navigate(node.dataset.view)))
 $$('[data-go]').forEach(node => node.addEventListener('click', () => navigate(node.dataset.go)))
-$('#menu-button').addEventListener('click', () => $('#sidebar').classList.toggle('open'))
+$('#menu-button')?.addEventListener('click', () => $('#sidebar').classList.toggle('open'))
 
 /* ---------- Top bar ---------- */
-$('#refresh-button').addEventListener('click', () => loadOverview(true))
-$('#export-button').addEventListener('click', () => exportCsv())
+$('#refresh-button')?.addEventListener('click', () => loadOverview(true))
+$('#export-button')?.addEventListener('click', () => exportCsv())
 
 async function exportCsv() {
   try {
