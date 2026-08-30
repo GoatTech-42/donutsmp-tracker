@@ -852,7 +852,10 @@ async function askAi() {
   const output = $('#ai-ask-answer')
   const q = input?.value?.trim()
   if (!q) return
-  if (output) output.innerHTML = '<div class="placeholder">Thinking…</div>'
+  if (output) {
+    output.classList.add('visible')
+    output.innerHTML = '<div class="placeholder">Thinking…</div>'
+  }
   try {
     const data = await api('/api/ai/ask', {
       method: 'POST',
