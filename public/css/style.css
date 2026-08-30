@@ -209,25 +209,29 @@ nav {
 #scan-progress {
   display: none;
   height: 3px;
-  background: var(--accent);
+  background: rgba(64, 78, 191, 0.15);
   border-radius: 2px;
   margin-top: 8px;
+  overflow: hidden;
 }
 
 #scan-progress.active {
   display: block;
-  animation: scanBar 1.5s ease infinite;
+}
+
+#scan-progress .bar {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  border-radius: 2px;
+  animation: scanBar 1.6s ease-in-out infinite;
 }
 
 @keyframes scanBar {
-  0% {
-    width: 0;
-    margin-left: 0;
-  }
-  100% {
-    width: 100%;
-    margin-left: -100%;
-  }
+  0% { width: 12%; margin-left: 0; }
+  50% { width: 60%; margin-left: 30%; }
+  100% { width: 12%; margin-left: 90%; }
 }
 
 /* ---------- Topbar ---------- */
