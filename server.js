@@ -34,7 +34,13 @@ app.use((req, res, next) => {
 })
 app.use(
   express.static(path.join(__dirname, 'public'), {
-    maxAge: process.env.NODE_ENV === 'production' ? 3600000 : 0
+    maxAge: process.env.NODE_ENV === 'production' ? 3600000 : 0,
+    setHeaders(res, filePath) {
+      if (filePath.endsWith('.html')) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+        res.setHeader('Pragma', 'no-cache')
+      }
+    }
   })
 )
 
