@@ -132,8 +132,16 @@ async function loadOverview(force) {
     hero.textContent = s.opportunities
     heroCap.textContent = `${fmtNum(s.recordedSales)} sales · ${data.outliers?.length || 0} outliers · scan #${data.status.scanCount}`
 
+    // Hero/metrics: only animate on first paint, not every scan poll
+    const heroEl = $('#hero')
+    const mgEl = $('#metric-grid')
+    const isFirstPaint = !heroEl.classList.contains('first-paint')
+    if (isFirstPaint) {
+      heroEl.classList.add('first-paint')
+      mgEl.classList.add('first-paint')
+    }
     // Metrics
-    $('#metric-grid').innerHTML = [
+    mgEl.innerHTML = [
       ['Market value', fmtMoney(s.marketValue), `${fmtNum(s.totalAuctions)} live listings`],
       ['Recorded turnover', fmtMoney(s.salesValue), `${fmtNum(s.recordedSales)} completed sales`],
       ['Unique assets', fmtNum(s.uniqueItems), 'Normalized markets'],
@@ -426,7 +434,8 @@ function drawBrain(data) {
   if (!svg) return
   const nn = data.neuralNet || {}
   const outliers = data.outliers || []
-  const W = 640, H = 280
+  const W = 640,
+    H = 280
   const layers = [
     { n: 8, x: 60, label: '32 features' },
     { n: 12, x: 220, label: '48 · ReLU' },
@@ -437,15 +446,18 @@ function drawBrain(data) {
   // Deterministic pseudo-activation from lastLoss so the brain isn't static
   const act = v => 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(v * 2.1))
   const loss = nn.pricePredictor?.lastLoss || 0.08
-  const totalEp = (nn.pricePredictor?.epochs || 0) + (nn.trendPredictor?.epochs || 0) + (nn.anomalyDetector?.epochs || 0)
+  const totalEp =
+    (nn.pricePredictor?.epochs || 0) + (nn.trendPredictor?.epochs || 0) + (nn.anomalyDetector?.epochs || 0)
   const pulsePhase = Date.now() / 700
   let s = `<rect width="${W}" height="${H}" rx="12" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.07)"/>`
   // Edges: sampled 22 thin lines with animated pulse
   for (let li = 0; li < layers.length - 1; li++) {
-    const a = layers[li], b = layers[li + 1]
+    const a = layers[li],
+      b = layers[li + 1]
     for (let i = 0; i < Math.min(3, a.n); i++) {
       for (let j = 0; j < Math.min(3, b.n); j++) {
-        const y1 = H / 2 + (i - 1) * 26 - 6, y2 = H / 2 + (j - 0.5 * (b.n - 1)) * 22
+        const y1 = H / 2 + (i - 1) * 26 - 6,
+          y2 = H / 2 + (j - 0.5 * (b.n - 1)) * 22
         const w = 0.45 + act(i * 1.7 + j * 2.3 + loss * 7) * 1.2
         const op = 0.08 + act(i + j) * 0.18 + (totalEp ? 0.08 : 0)
         const dash = Math.abs(Math.sin(pulsePhase + i + j * 0.7)) * 6
@@ -465,7 +477,10 @@ function drawBrain(data) {
     for (let i = 0; i < ly.n; i++) {
       const y = H / 2 + (i - (ly.n - 1) / 2) * 22
       const a = act(ly.x * 0.01 + i * 0.9 + loss * 3)
-      const fill = ly.x === 560 ? `rgba(64,78,191,${(0.55 + a * 0.4).toFixed(2)})` : `rgba(255,255,255,${(0.18 + a * 0.55).toFixed(2)})`
+      const fill =
+        ly.x === 560
+          ? `rgba(64,78,191,${(0.55 + a * 0.4).toFixed(2)})`
+          : `rgba(255,255,255,${(0.18 + a * 0.55).toFixed(2)})`
       const r = ly.x === 560 ? 7 : 5
       s += `<circle cx="${ly.x}" cy="${y}" r="${r}" fill="${fill}" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>`
     }
@@ -489,7 +504,9 @@ function drawBrain(data) {
   svg.innerHTML = s
   const legend = $('#brain-legend')
   if (legend) {
-    const price = nn.pricePredictor || {}, trend = nn.trendPredictor || {}, anom = nn.anomalyDetector || {}
+    const price = nn.pricePredictor || {},
+      trend = nn.trendPredictor || {},
+      anom = nn.anomalyDetector || {}
     legend.innerHTML = `<span>${totalEp.toLocaleString()} epochs</span> · <span>price loss ${price.lastLoss?.toFixed(4) ?? '—'}</span> · <span>trend ${trend.epochs || 0}ep</span> · <span>anomaly ${anom.epochs || 0}ep</span> · <span>${outliers.length} outliers feeding replay</span>`
   }
 }
@@ -521,7 +538,12 @@ async function loadNeural() {
       if (sig) {
         const top = (data.outliers || []).slice(0, 5)
         sig.innerHTML = top.length
-          ? top.map(o => `<div class="row"><span>${escHtml(o.name)}</span><span class="badge">Z ${o.zScore}</span><b class="${o.direction === 'overpriced' ? 'down' : 'up'}">${fmtPct(o.deviation)}</b><small>→ training</small></div>`).join('')
+          ? top
+              .map(
+                o =>
+                  `<div class="row"><span>${escHtml(o.name)}</span><span class="badge">Z ${o.zScore}</span><b class="${o.direction === 'overpriced' ? 'down' : 'up'}">${fmtPct(o.deviation)}</b><small>→ training</small></div>`
+              )
+              .join('')
           : `<div class="placeholder">No outlier signals this scan.</div>`
       }
     } catch (e) {
@@ -611,13 +633,6 @@ async function loadNeural() {
 
 $('#nn-search')?.addEventListener('input', debounce(loadNeural, 300))
 $('#nn-filter')?.addEventListener('change', loadNeural)
-
-/* ---------- ANOMALIES removed: merged into Neural signals ---------- */
-    bindOpenItem('#anomalies-grid')
-  } catch (e) {
-    grid.innerHTML = `<div class="placeholder">${e.message}</div>`
-  }
-}
 
 /* ---------- CHARTS ---------- */
 async function loadCharts() {
@@ -709,44 +724,95 @@ $('#chart-search')?.addEventListener('keydown', e => {
   if (e.key === 'Enter') loadCharts()
 })
 
-/* ---------- ITEM DETAIL (modal) ---------- */
+/* ---------- ITEM DETAIL ---------- */
+let _itemChart = null
 async function openItemDetail(name) {
+  const title = $('#item-title')
+  const sub = $('#item-subtitle')
+  const root = $('#item-detail')
+  if (title) title.textContent = name
+  navigate('item')
+  if (!root) return
+  root.innerHTML = `<div class="placeholder">Loading ${escHtml(name)}…</div>`
   try {
     const data = await api(`/api/market/${encodeURIComponent(name)}`)
-    if (!data.item) return
+    if (!data.item) {
+      root.innerHTML = `<div class="placeholder">Not found: ${escHtml(name)}</div>`
+      return
+    }
     const i = data.item
-    const listings = (data.listings || []).slice(0, 20)
-    const sales = (data.sales || []).slice(0, 20)
-    const enchants = i.enchants
-      ? Object.entries(i.enchants)
-          .map(([k, v]) => `${k} ${v}`)
-          .join(', ')
-      : '—'
-    const shulker = (i.contents || []).length
-      ? (i.contents || []).map(c => `${c.count}× ${c.itemName || c.display_name || c.id}`).join(', ')
-      : '—'
-
-    const html = `
-      <h2 style="margin:0 0 8px">${escHtml(i.name)}</h2>
-      <p style="color:var(--text-2);margin:0 0 16px">${i.isEnchanted ? 'Enchanted · ' + escHtml(enchants) : 'Standard item'}</p>
-      <div class="metric-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">
-        <div class="metric-card"><span class="label">Floor</span><strong>${fmtMoney(i.floor)}</strong></div>
-        <div class="metric-card"><span class="label">Fair</span><strong>${fmtMoney(i.fairValue)}</strong></div>
-        <div class="metric-card"><span class="label">Conf</span><strong>${i.confidence}%</strong></div>
-        <div class="metric-card"><span class="label">Sales</span><strong>${fmtNum(i.sales)}</strong></div>
-        <div class="metric-card"><span class="label">Listings</span><strong>${fmtNum(i.listings)}</strong></div>
-        <div class="metric-card"><span class="label">Volatility</span><strong>${i.volatility}%</strong></div>
+    const listings = (data.listings || []).slice(0, 12)
+    const sales = (data.sales || []).slice(0, 12)
+    const history = data.history || []
+    if (sub)
+      sub.textContent = i.isEnchanted
+        ? `Variant · ${escHtml(i.variantLabel || '')} · ${fmtNum(i.sales)} sales`
+        : `${fmtNum(i.sales)} sales · ${fmtNum(i.listings)} listings`
+    root.innerHTML = `
+      <div class="metric-grid" style="grid-template-columns:repeat(3,1fr)">
+        <div class="metric-card"><span class="label">Floor</span><strong>${fmtMoney(i.floor)}</strong><small>${fmtMoney(i.floorRaw)} raw</small></div>
+        <div class="metric-card"><span class="label">Fair (${escHtml(i.fairValueSource || '—')})</span><strong>${fmtMoney(i.fairValue)}</strong></div>
+        <div class="metric-card"><span class="label">Confidence</span><strong>${i.confidence}%</strong></div>
       </div>
-      <h3>Shulker contents</h3>
-      <p style="color:var(--text-2)">${escHtml(shulker)}</p>
-      <h3>Top listings</h3>
-      ${listings.length ? listings.map(l => `<div class="row"><span>${escHtml(l.seller?.name || '—')}</span><b>${fmtMoney(l.price)}</b><small>${l.count}×</small></div>`).join('') : '<div class="placeholder">No listings.</div>'}
-      <h3 style="margin-top:16px">Recent sales</h3>
-      ${sales.length ? sales.map(s => `<div class="row"><span>${escHtml(s.seller?.name || '—')}</span><b>${fmtMoney(s.price)}</b><small>${fmtNum(s.count)}× · ${relative(s.dateSold)}</small></div>`).join('') : '<div class="placeholder">No sales.</div>'}
+      <div class="card" style="margin-top:14px">
+        <header><strong>Price history (capped 100)</strong></header>
+        <div class="chart-box" style="height:220px"><canvas id="item-chart"></canvas></div>
+      </div>
+      <div class="grid-2" style="margin-top:14px">
+        <article class="card"><header><strong>Top listings (12)</strong></header><div class="list">${listings.length ? listings.map(l => `<div class="row"><span>${escHtml(l.seller?.name || '—')}</span><b>${fmtMoney(l.price)}</b><small>${l.isOutlier ? 'outlier · ' : ''}${fmtNum(l.count)}×</small></div>`).join('') : '<div class="placeholder">No listings.</div>'}</div></article>
+        <article class="card"><header><strong>Recent sales (12)</strong></header><div class="list">${sales.length ? sales.map(s => `<div class="row"><span>${escHtml(s.seller?.name || '—')}</span><b>${fmtMoney(s.price)}</b><small>${fmtNum(s.count)}× · ${relative(s.dateSold)}</small></div>`).join('') : '<div class="placeholder">No sales yet.</div>'}</div></article>
+      </div>
     `
-    // Reuse the anomalies grid if we're on anomalies view, otherwise show a toast
-    toast(i.name + ' · ' + fmtMoney(i.floor) + ' floor · ' + fmtNum(i.sales) + ' sales', false)
+    if (history.length > 1 && window.Chart) {
+      const ctx = document.getElementById('item-chart')
+      if (_itemChart) {
+        try {
+          _itemChart.destroy()
+        } catch (_) {}
+      }
+      _itemChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: history.map(h => new Date(h.timestamp).toLocaleDateString()),
+          datasets: [
+            {
+              label: 'Floor',
+              data: history.map(h => h.floor),
+              borderColor: '#404ebf',
+              backgroundColor: 'rgba(64,78,191,0.12)',
+              fill: true,
+              tension: 0.25,
+              pointRadius: 0,
+              borderWidth: 2
+            },
+            {
+              label: 'Median',
+              data: history.map(h => h.median),
+              borderColor: '#fbbf24',
+              borderDash: [4, 4],
+              fill: false,
+              tension: 0.25,
+              pointRadius: 0,
+              borderWidth: 1.5
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: '#a0a8b8' } } },
+          scales: {
+            x: { ticks: { color: '#6c7388', maxTicksLimit: 8 }, grid: { color: '#252a3a' } },
+            y: {
+              ticks: { color: '#6c7388', callback: v => '$' + Number(v).toLocaleString() },
+              grid: { color: '#252a3a' }
+            }
+          }
+        }
+      })
+    }
   } catch (e) {
+    root.innerHTML = `<div class="placeholder">${escHtml(e.message)}</div>`
     toast(e.message, true)
   }
 }

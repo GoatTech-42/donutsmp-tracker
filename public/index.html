@@ -85,7 +85,7 @@
 
         <!-- OVERVIEW -->
         <section id="view-overview" class="view active" data-view="overview">
-          <div class="hero">
+          <div class="hero" id="hero">
             <div class="hero-left">
               <span class="eyebrow">Live market</span>
               <h2>DonutSMP Pulse</h2>
@@ -350,6 +350,20 @@
               <header><strong>Neural overlay</strong></header>
               <div id="chart-nn" class="list"></div>
             </article>
+          </div>
+        </section>
+
+        <!-- ITEM DETAIL -->
+        <section id="view-item" class="view" data-view="item">
+          <header class="page-header">
+            <span class="eyebrow">Item</span>
+            <h2 id="item-title">Item detail</h2>
+            <p id="item-subtitle" style="color: var(--text-2); margin: 4px 0 0">
+              Select an item from the market.
+            </p>
+          </header>
+          <div id="item-detail" class="item-detail">
+            <div class="placeholder">Pick an item from Market or Opportunities.</div>
           </div>
         </section>
 
