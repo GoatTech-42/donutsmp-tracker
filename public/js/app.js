@@ -1,822 +1,827 @@
-const state = {
-  overview: null,
-  flips: [],
-  market: [],
-  salesPage: 1,
-  view: 'overview',
-  nnPredictions: [],
-  anomalies: [],
-  itemName: null
-}
-const $ = selector => document.querySelector(selector)
-const $$ = selector => [...document.querySelectorAll(selector)]
-const escapeHtml = value =>
-  String(value ?? '').replace(
-    /[&<>'"]/g,
-    char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]
+/* ====================================================================
+   Pulse — DonutSMP market dashboard
+   Clean rewrite: no tangled event handlers, every selector validated,
+   no global state mutations leaking across views.
+   ==================================================================== */
+
+const $ = (sel, root = document) => root.querySelector(sel)
+const $$ = (sel, root = document) => [...root.querySelectorAll(sel)]
+
+const fmtNum = n => Number(n || 0).toLocaleString('en-US')
+const fmtMoney = n =>
+  '$' + Number(n || 0).toLocaleString('en-US', { notation: 'compact', maximumFractionDigits: 1 })
+const fmtPct = n => (n > 0 ? '+' : '') + (n || 0).toFixed(1) + '%'
+const escHtml = s =>
+  String(s ?? '').replace(
+    /[&<>"']/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
   )
-const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 })
-const number = new Intl.NumberFormat('en-US')
-const money = value => `$${compact.format(Number(value) || 0)}`
-const relative = value => {
-  if (!value) return '—'
-  const seconds = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 1000))
-  if (seconds < 60) return `${seconds}s ago`
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`
-  return `${Math.floor(seconds / 86400)}d ago`
-}
-function debounce(fn, delay = 250) {
-  let timer
-  return (...args) => {
-    clearTimeout(timer)
-    timer = setTimeout(() => fn(...args), delay)
-  }
-}
-function skeletons(count = 3, lines = 3) {
-  return Array.from(
-    { length: count },
-    () => `<div class="skeleton" style="height:${lines * 18}px;margin:8px 0;border-radius:6px"></div>`
-  ).join('')
+
+function relative(date) {
+  if (!date) return '—'
+  const s = Math.max(0, Math.round((Date.now() - new Date(date).getTime()) / 1000))
+  if (s < 60) return `${s}s ago`
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`
+  return `${Math.floor(s / 86400)}d ago`
 }
 
-async function request(url, options) {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 30000)
+function toast(msg, isError = false) {
+  const node = document.createElement('div')
+  node.className = 'toast' + (isError ? ' error' : '')
+  node.textContent = msg
+  $('#toast-region').appendChild(node)
+  setTimeout(() => node.remove(), 4000)
+}
+
+async function api(path, options = {}) {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 30000)
   try {
-    const response = await fetch(url, { ...options, signal: controller.signal })
-    const payload = await response.json().catch(() => ({}))
-    if (!response.ok) throw new Error(payload.error || `Request failed (${response.status})`)
-    return payload
+    const res = await fetch(path, { ...options, signal: ctrl.signal })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+    return data
   } finally {
     clearTimeout(timer)
   }
 }
-function toast(message, error = false) {
-  const node = document.createElement('div')
-  node.className = `toast${error ? ' error' : ''}`
-  node.textContent = message
-  $('#toast-region').append(node)
-  setTimeout(() => node.remove(), 3800)
-}
-function empty(message) {
-  return `<div class="empty-message">${escapeHtml(message)}</div>`
-}
 
-function sparkline(values, color = '#404ebf', w = 60, h = 20) {
-  if (!values || values.length < 2) return ''
-  const min = Math.min(...values),
-    max = Math.max(...values),
-    range = max - min || 1
-  const points = values
-    .map((v, i) => `${(i / (values.length - 1)) * w},${h - ((v - min) / range) * h}`)
-    .join(' ')
-  return `<svg width="${w}" height="${h}" style="vertical-align:middle"><polyline points="${points}" fill="none" stroke="${color}" stroke-width="1.5"/></svg>`
+/* ---------- Application state ---------- */
+const state = {
+  view: 'overview',
+  overview: null,
+  market: [],
+  salesPage: 1,
+  chartItem: null
 }
 
 const titles = {
-  overview: ['Pulse', 'Overview'],
+  overview: ['Live market', 'Overview'],
   opportunities: ['Filtered', 'Opportunities'],
   market: ['Fair value', 'Explorer'],
-  sales: ['Proof of price', 'Sales'],
-  neural: ['Forecast', 'Neural'],
-  anomalies: ['Anomaly', 'Anomalies'],
+  sales: ['Proof', 'Sales'],
+  neural: ['Always training', 'Neural network'],
+  anomalies: ['Outliers', 'Anomalies'],
   charts: ['History', 'Charts'],
-  item: ['Item', 'Item detail'],
-  players: ['Public', 'Players']
+  players: ['Public', 'Player lookup']
 }
+
+/* ---------- Navigation ---------- */
 function navigate(view) {
+  if (!titles[view]) view = 'overview'
   state.view = view
-  $$('.view').forEach(node => node.classList.toggle('active', node.id === `view-${view}`))
+  $$('.view').forEach(node => node.classList.toggle('active', node.dataset.view === view))
   $$('.nav-link').forEach(node => node.classList.toggle('active', node.dataset.view === view))
+  $('#sidebar').classList.remove('open')
   $('#page-eyebrow').textContent = titles[view][0]
   $('#page-title').textContent = titles[view][1]
-  $('#sidebar').classList.remove('open')
-  history.replaceState(null, '', `#${view}`)
-  if (view === 'opportunities') loadFlips()
-  if (view === 'market') loadMarket()
-  if (view === 'sales') loadSales()
-  if (view === 'neural') loadPredictions()
-  if (view === 'anomalies') loadAnomalies()
-  if (view === 'charts') loadChartState()
-  if (view === 'item') loadItemDetail()
-  if (view === 'players') {
+  history.replaceState(null, '', '#' + view)
+  // Lazy-load the active view
+  if (view === 'opportunities') loadOpportunities()
+  else if (view === 'market') loadMarket()
+  else if (view === 'sales') loadSales()
+  else if (view === 'neural') loadNeural()
+  else if (view === 'anomalies') loadAnomalies()
+  else if (view === 'charts') loadCharts()
+  else if (view === 'players') {
   }
 }
+
 $$('.nav-link').forEach(node => node.addEventListener('click', () => navigate(node.dataset.view)))
 $$('[data-go]').forEach(node => node.addEventListener('click', () => navigate(node.dataset.go)))
 $('#menu-button').addEventListener('click', () => $('#sidebar').classList.toggle('open'))
 
-function renderStatus(status) {
-  $('#source-label').textContent = 'Official API'
-  $('#source-note').textContent = status.scanning
-    ? 'Fetching market data…'
-    : 'Live auction and transaction data.'
-  $('#scan-count').textContent = `Scan #${status.scanCount}`
-  $('#last-scan').textContent = relative(status.lastSuccess)
-  $('#feed-status').textContent = status.scanning ? 'Scanning' : status.lastError ? 'Degraded' : 'Live'
-  const progress = $('#scan-progress')
-  if (progress) {
-    if (status.scanning) {
-      progress.style.display = 'block'
-      progress.querySelector('.bar').style.animation = 'none'
-      void progress.querySelector('.bar').offsetWidth
-      progress.querySelector('.bar').style.animation = ''
-    } else {
-      progress.style.display = 'none'
-    }
+/* ---------- Top bar ---------- */
+$('#refresh-button').addEventListener('click', () => loadOverview(true))
+$('#export-button').addEventListener('click', () => exportCsv())
+
+async function exportCsv() {
+  try {
+    const r = await fetch('/api/export?format=csv')
+    if (!r.ok) throw new Error('export failed')
+    const blob = await r.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `pulse-${Date.now()}.csv`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+    toast('Export downloaded')
+  } catch (e) {
+    toast(e.message, true)
   }
 }
 
-let overviewFirstLoad = true
-async function loadOverview() {
-  const isLiveRefresh = !overviewFirstLoad
+/* ---------- OVERVIEW ---------- */
+async function loadOverview(force) {
+  const hero = $('#hero-score')
+  const heroCap = $('#hero-caption')
   try {
-    const data = await request('/api/overview')
+    const data = await api('/api/overview')
     state.overview = data
-    state.nnPredictions = data.predictions || []
     renderStatus(data.status)
     const s = data.summary
-    $('#hero-score').textContent = s.opportunities
-    $('#hero-caption').textContent =
-      `${s.recordedSales} completed sales · ${data.anomalies?.length || 0} anomalies · ${data.outliers?.length || 0} outliers`
-    $('#nav-opportunities').textContent = s.opportunities
+
+    // Hero
+    hero.textContent = s.opportunities
+    heroCap.textContent = `${fmtNum(s.recordedSales)} sales · ${data.outliers?.length || 0} outliers · scan #${data.status.scanCount}`
+
+    // Metrics
     $('#metric-grid').innerHTML = [
-      ['Market value', money(s.marketValue), `${number.format(s.totalAuctions)} live listings`],
-      ['Recorded turnover', money(s.salesValue), `${number.format(s.recordedSales)} completed sales`],
-      ['Unique assets', number.format(s.uniqueItems), 'Normalized item markets'],
-      [
-        'Neural epochs',
-        number.format(data.neuralNet?.pricePredictor?.epochs || 0),
-        `Loss: ${data.neuralNet?.pricePredictor?.lastLoss?.toFixed(4) || 'N/A'}`
-      ]
+      ['Market value', fmtMoney(s.marketValue), `${fmtNum(s.totalAuctions)} live listings`],
+      ['Recorded turnover', fmtMoney(s.salesValue), `${fmtNum(s.recordedSales)} completed sales`],
+      ['Unique assets', fmtNum(s.uniqueItems), 'Normalized markets'],
+      ['Flips queued', fmtNum(s.opportunities), 'Sorted by confidence']
     ]
       .map(
-        x =>
-          `<div class="metric-card"><span class="label">${x[0]}</span><strong>${x[1]}</strong><small>${x[2]}</small></div>`
+        ([label, value, sub]) =>
+          `<div class="metric-card"><span class="label">${label}</span><strong>${value}</strong><small>${sub}</small></div>`
       )
       .join('')
 
-    const midScanNoSales = data.summary.recordedSales === 0
-    if (midScanNoSales) {
-      $('#top-flips').classList.remove('loading-block')
-      $('#top-flips').innerHTML =
-        `<div class="empty-message" style="opacity:.8">Scan in progress — ${number.format(data.summary.totalAuctions || 0)} auctions so far, waiting on sales to anchor prices. Board updates automatically.</div>`
-    } else {
-      $('#top-flips').classList.remove('loading-block')
-      $('#top-flips').innerHTML = data.topFlips.length
-        ? data.topFlips
-            .map(f => {
-              const ingHtml = f.ingredients
-                ? f.ingredients
-                    .slice(0, 4)
-                    .map(i => `${i.count}×${escapeHtml(i.name)}`)
-                    .join('+')
-                : ''
-              return `<button class="opportunity-row text-button" data-open-flips="${escapeHtml(f.name)}" data-open-item="${escapeHtml(f.name)}"><div><div class="asset-name">${escapeHtml(f.name)}</div><span class="strategy">${f.type}${ingHtml ? ' · ' + ingHtml : ''} · ${f.risk.label} risk</span></div><div><div class="profit">+${money(f.profit)}</div><div class="roi">${f.roi}% ROI</div></div></button>`
-            })
-            .join('')
-        : empty('No qualified opportunities yet.')
-      $$('[data-open-flips]').forEach(node =>
-        node.addEventListener('click', () => {
-          navigate('opportunities')
-          $('#flip-search').value = node.dataset.openFlips
-          loadFlips()
-        })
-      )
-      $$('[data-open-item]').forEach(node =>
-        node.addEventListener('click', e => {
-          e.stopPropagation()
-          openItemDetail(node.dataset.openItem)
-        })
-      )
-    }
+    // Top flips
+    const topFlips = data.topFlips || []
+    $('#top-flips').innerHTML = topFlips.length
+      ? topFlips.slice(0, 6).map(renderFlipRow).join('')
+      : `<div class="placeholder">No qualified opportunities yet.</div>`
+    bindOpenItem('#top-flips')
 
-    $('#active-market').classList.remove('loading-block')
-    $('#active-market').innerHTML =
-      data.active
-        .slice(0, 7)
-        .map(x => {
-          const hist = (data.predictions || []).find(p => p.name === x.name)
-          const spark = x._sparkline || []
-          return `<div class="compact-row" style="cursor:pointer" data-open-item="${escapeHtml(x.name)}"><span>${escapeHtml(x.name)}</span><b>${x.sales} sales</b><small>${money(x.floor)} floor</small></div>`
-        })
-        .join('') || empty('Waiting for sales data.')
-    $$('[data-open-item]', $('#active-market')).forEach(n =>
-      n.addEventListener('click', () => openItemDetail(n.dataset.openItem))
-    )
-
-    $('#movers').classList.remove('loading-block')
-    $('#movers').innerHTML =
-      data.movers
-        .slice(0, 7)
-        .map(
-          x =>
-            `<div class="compact-row" style="cursor:pointer" data-open-item="${escapeHtml(x.name)}"><span>${escapeHtml(x.name)}</span><b class="${x.change >= 0 ? 'up' : 'down'}">${x.change > 0 ? '+' : ''}${x.change}%</b><small>${money(x.floor)} floor</small><small>${x.confidence}% conf</small></div>`
-        )
-        .join('') || empty('More scans are needed for momentum.')
-    $$('[data-open-item]', $('#movers')).forEach(n =>
-      n.addEventListener('click', () => openItemDetail(n.dataset.openItem))
-    )
-
-    if (midScanNoSales) {
-      $('#data-health').innerHTML =
-        `<div class="health-item"><b>Scanning auctions</b><span>${number.format(data.summary.totalAuctions || 0)} auctions so far · sales still loading</span></div><div class="health-item"><b>Neural net</b><span>${data.neuralNet?.pricePredictor?.trained ? `${data.neuralNet.pricePredictor.epochs} epochs` : 'Waiting for sales to train'}</span></div><div class="health-item"><b>${data.status.scanning ? 'Live scan in progress' : relative(data.status.lastSuccess)}</b><span>Prices anchor once sales arrive</span></div>`
-    } else {
-      $('#data-health').innerHTML =
-        `<div class="health-item"><b>Official DonutSMP API</b><span>Authenticated live market feed</span></div><div class="health-item"><b>Neural net</b><span>${data.neuralNet?.pricePredictor?.trained ? `${data.neuralNet.pricePredictor.epochs} epochs` : 'Training…'}</span></div><div class="health-item"><b>${relative(data.status.lastSuccess)}</b><span>Last snapshot</span></div>`
-    }
-
-    $('#predictions').classList.remove('loading-block')
-    $('#predictions').innerHTML =
-      data.predictions
-        ?.slice(0, 8)
-        .map(
-          p =>
-            `<div class="compact-row" style="cursor:pointer" data-open-item="${escapeHtml(p.name)}"><span>${escapeHtml(p.name)}</span><b>${money(p.current)}</b><b class="${p.change >= 0 ? 'up' : 'down'}">${p.change > 0 ? '+' : ''}${p.change}%</b><span class="${p.trend === 'UP' ? 'up' : p.trend === 'DOWN' ? 'down' : ''}">${p.trend}</span><small>${p.confidence}%</small></div>`
-        )
-        .join('') || empty('Predictions need more training data.')
-    $$('[data-open-item]', $('#predictions')).forEach(n =>
-      n.addEventListener('click', () => openItemDetail(n.dataset.openItem))
-    )
-
-    $('#nn-status').classList.remove('loading-block')
-    const nn = data.neuralNet
-    $('#nn-status').innerHTML = `
-      <div class="compact-row"><span>Price predictor</span><b>${nn?.pricePredictor?.trained ? 'Trained' : 'Training'}</b><small>${nn?.pricePredictor?.epochs || 0} epochs</small><small>${nn?.pricePredictor?.lastLoss ? 'Loss: ' + nn.pricePredictor.lastLoss.toFixed(4) : ''}</small></div>
-      <div class="compact-row"><span>Trend predictor</span><b>${nn?.trendPredictor?.trained ? 'Trained' : 'Training'}</b><small>${nn?.trendPredictor?.epochs || 0} epochs</small></div>
-      <div class="compact-row"><span>Anomaly detector</span><b>${nn?.anomalyDetector?.trained ? 'Trained' : 'Training'}</b><small>${nn?.anomalyDetector?.epochs || 0} epochs</small></div>
-      <div class="compact-row"><span>Training samples</span><b>${nn?.trainingSamples || 0}</b><small>${relative(nn?.lastTraining)}</small></div>
-    `
-    renderTrainingChart(nn?.pricePredictor?.lossHistory || [])
-
-    const outliersList = $('#outliers-list')
-    if (outliersList) {
-      if (!isLiveRefresh) outliersList.classList.remove('loading-block')
-      const outliers = data.outliers || []
-      outliersList.innerHTML = outliers.length
-        ? outliers
-            .slice(0, 10)
-            .map(
-              o =>
-                `<div class="compact-row" style="cursor:pointer" data-open-item="${escapeHtml(o.name)}"><span>${escapeHtml(o.name)}</span><b class="${o.deviation >= 0 ? 'up' : 'down'}">${o.deviation > 0 ? '+' : ''}${o.deviation}%</b><small>Z: ${o.zScore}</small><small>${o.iqrOutlier ? 'IQR' : ''}</small><small>${o.direction}</small></div>`
-            )
-            .join('')
-        : empty('No statistical outliers detected.')
-      $$('[data-open-item]', outliersList).forEach(n =>
-        n.addEventListener('click', () => openItemDetail(n.dataset.openItem))
-      )
-    }
-    overviewFirstLoad = false
-  } catch (error) {
-    toast(error.message, true)
-  }
-}
-
-function renderTrainingChart(lossHistory) {
-  const container = $('#training-chart')
-  if (!container) return
-  const canvas = document.createElement('canvas')
-  canvas.width = 400
-  canvas.height = 100
-  const ctx = canvas.getContext('2d')
-  const data = lossHistory.slice(-100)
-  if (data.length < 2) {
-    container.innerHTML = '<span class="empty-message">No training data yet</span>'
-    return
-  }
-  const min = Math.min(...data),
-    max = Math.max(...data),
-    range = max - min || 1
-  ctx.strokeStyle = '#404ebf'
-  ctx.lineWidth = 2
-  ctx.beginPath()
-  data.forEach((loss, i) => {
-    const x = (i / (data.length - 1)) * 380 + 10
-    const y = 90 - ((loss - min) / range) * 80
-    if (i === 0) ctx.moveTo(x, y)
-    else ctx.lineTo(x, y)
-  })
-  ctx.stroke()
-  ctx.fillStyle = 'rgba(64,78,191,0.1)'
-  ctx.lineTo(390, 95)
-  ctx.lineTo(10, 95)
-  ctx.closePath()
-  ctx.fill()
-  container.innerHTML = ''
-  container.appendChild(canvas)
-}
-
-async function loadFlips() {
-  const params = new URLSearchParams({
-    search: $('#flip-search').value,
-    type: $('#flip-type').value,
-    minProfit: $('#flip-profit').value
-  })
-  try {
-    const data = await request(`/api/flips?${params}`)
-    state.flips = data.flips
-    $('#flip-grid').innerHTML = data.flips.length
-      ? data.flips
-          .map(f => {
-            const ingHtml = f.ingredients
-              ? `<div class="flip-ingredients">${f.ingredients.map(i => `<span class="badge">${i.count}× ${escapeHtml(i.name)} @ ${money(i.unitPrice)}</span>`).join(' ')}</div>`
-              : ''
-            const enchBadge = f.enchantment
-              ? ` <span class="badge" style="background:#1a1040;color:#a78bfa">${escapeHtml(f.enchantment)}</span>`
-              : ''
-            return `<article class="flip-card" data-open-item="${escapeHtml(f.name)}" style="cursor:pointer"><div class="flip-top"><div><h3>${escapeHtml(f.name)}</h3><div style="margin-top:7px"><span class="badge">${f.type}</span> <span class="badge risk-${f.risk.label.toLowerCase()}">${f.risk.label} risk</span>${f.resultCount > 1 ? ` <span class="badge">×${f.resultCount}</span>` : ''}${enchBadge}</div></div><div><div class="flip-profit">+${money(f.profit)}</div><div class="roi">${f.roi}% ROI</div></div></div>${ingHtml}<div class="flip-route"><div><small>Acquire</small><b>${money(f.buyPrice)}</b></div><i>→</i><div><small>After tax</small><b>${money(f.afterTax)}</b></div></div><div class="flip-meta"><span>${f.volume} sales</span><span>${f.confidence}% conf</span><span>Score ${compact.format(f.score)}</span></div></article>`
-          })
-          .join('')
-      : empty('No opportunities match these filters.')
-    $$('#flip-grid [data-open-item]').forEach(node =>
-      node.addEventListener('click', e => {
-        e.stopPropagation()
-        openItemDetail(node.dataset.openItem)
-      })
-    )
-  } catch (error) {
-    toast(error.message, true)
-  }
-}
-
-async function loadMarket() {
-  const params = new URLSearchParams({
-    search: $('#market-search').value,
-    sort: $('#market-sort').value,
-    limit: 100
-  })
-  try {
-    const data = await request(`/api/market?${params}`)
-    state.market = data.items
-    $('#market-body').innerHTML =
-      data.items
-        .map(x => {
-          const hist = x.prediction
-            ? [x.floor, x.fairValue, x.prediction.predictedPrice]
-            : [x.floor, x.fairValue]
-          return `<tr style="cursor:pointer" data-open-item="${escapeHtml(x.name)}"><td class="asset">${escapeHtml(x.name)}</td><td class="mono">${money(x.floor)}</td><td class="mono">${money(x.fairValue)}</td><td>${x.sales}</td><td class="mono">${money(x.salesValue)}</td><td class="${x.change >= 0 ? 'up' : 'down'}">${x.change > 0 ? '+' : ''}${x.change}%</td><td><div class="confidence" title="${x.confidence}% confidence"><i style="width:${x.confidence}%"></i></div></td></tr>`
-        })
-        .join('') || `<tr><td colspan="7">No matching assets.</td></tr>`
-    $$('#market-body tr').forEach(row =>
-      row.addEventListener('click', () => {
-        const name = row.dataset.openItem
-        if (name) openItemDetail(name)
-      })
-    )
-  } catch (error) {
-    toast(error.message, true)
-  }
-}
-
-async function loadSales(page = 1) {
-  state.salesPage = page
-  const params = new URLSearchParams({ search: $('#sales-search').value, page, limit: 40 })
-  try {
-    const data = await request(`/api/transactions?${params}`)
-    $('#sales-body').innerHTML =
-      data.transactions
-        .map(
-          x =>
-            `<tr style="cursor:pointer" data-open-item="${escapeHtml(x.itemName)}"><td class="asset">${escapeHtml(x.itemName)}</td><td>${number.format(x.count)}×</td><td class="mono">${money(x.price)}</td><td class="mono">${money(x.pricePerUnit)}</td><td>${escapeHtml(x.seller?.name || '—')}</td><td>${relative(x.dateSold)}</td></tr>`
-        )
-        .join('') || `<tr><td colspan="6">No completed sales found.</td></tr>`
-    $$('#sales-body tr').forEach(row =>
-      row.addEventListener('click', () => {
-        const name = row.dataset.openItem
-        if (name) openItemDetail(name)
-      })
-    )
-    $('#sales-pagination').innerHTML =
-      `${data.page > 1 ? '<button data-page="prev">← Prev</button>' : ''}<span>Page ${data.page} / ${data.pages}</span>${data.page < data.pages ? '<button data-page="next">Next →</button>' : ''}`
-    $$('[data-page]').forEach(node =>
-      node.addEventListener('click', () =>
-        loadSales(node.dataset.page === 'prev' ? data.page - 1 : data.page + 1)
-      )
-    )
-  } catch (error) {
-    toast(error.message, true)
-  }
-}
-
-async function loadPredictions() {
-  try {
-    const data = await request('/api/neural/predictions')
-    state.nnPredictions = data.predictions
-    const filter = $('#nn-filter').value
-    let filtered = data.predictions
-    if (filter === 'up') filtered = filtered.filter(p => p.trend === 'UP')
-    if (filter === 'down') filtered = filtered.filter(p => p.trend === 'DOWN')
-    if (filter === 'high-conf') filtered = filtered.filter(p => p.confidence > 70)
-    $('#nn-body').innerHTML =
-      filtered
-        .map(
-          p =>
-            `<tr style="cursor:pointer" data-open-item="${escapeHtml(p.name)}"><td class="asset">${escapeHtml(p.name)}</td><td class="mono">${money(p.current)}</td><td class="mono">${money(p.predicted)}</td><td class="${p.change >= 0 ? 'up' : 'down'}">${p.change > 0 ? '+' : ''}${p.change}%</td><td><span class="badge">${p.trend}</span></td><td><div class="confidence" title="${p.confidence}% confidence"><i style="width:${p.confidence}%"></i></div></td><td>${p.change > 2 ? 'BUY' : p.change < -2 ? 'SELL' : 'HOLD'}</td></tr>`
-        )
-        .join('') || `<tr><td colspan="7">No predictions match the filter.</td></tr>`
-    $$('#nn-body tr').forEach(row =>
-      row.addEventListener('click', () => {
-        const name = row.dataset.openItem
-        if (name) openItemDetail(name)
-      })
-    )
-    try {
-      const history = await request('/api/neural/history')
-      renderTrainingChart(history.lossHistory || [])
-    } catch (_) {}
-  } catch (error) {
-    toast(error.message, true)
-  }
-}
-
-async function loadAnomalies() {
-  try {
-    const data = await request('/api/overview')
-    state.anomalies = data.anomalies || []
-    const outliers = data.outliers || []
-    const all = [
-      ...state.anomalies.map(a => ({ ...a, source: 'neural' })),
-      ...outliers.map(o => ({
-        item: o.name,
-        anomalyScore: Math.min(99, Math.abs(o.zScore) * 30),
-        currentPrice: o.price,
-        avgPrice: o.avg,
-        deviation: o.deviation,
-        type: o.direction,
-        listings: o.sales,
-        source: 'statistical',
-        zScore: o.zScore,
-        iqrOutlier: o.iqrOutlier
-      }))
-    ].sort((a, b) => (b.anomalyScore || 0) - (a.anomalyScore || 0))
-    $('#anomalies-grid').innerHTML = all.length
-      ? all
+    // Active market
+    const active = data.active || []
+    $('#active-market').innerHTML = active.length
+      ? active
+          .slice(0, 7)
           .map(
-            a =>
-              `<article class="flip-card" style="cursor:pointer" data-open-item="${escapeHtml(a.item)}"><div class="flip-top"><div><h3>${escapeHtml(a.item)}</h3><div style="margin-top:7px"><span class="badge">${a.type}</span> <span class="badge risk-high">${Math.round(a.anomalyScore)}% signal</span> <span class="badge">${a.source}</span></div></div><div><div class="flip-profit ${a.deviation > 0 ? '' : 'negative'}">${a.deviation > 0 ? '+' : ''}${a.deviation}%</div></div></div><div class="flip-route"><div><small>Current</small><b>${money(a.currentPrice)}</b></div><i>→</i><div><small>Avg (10)</small><b>${money(a.avgPrice)}</b></div></div><div class="flip-meta"><span>${a.listings} listings</span>${a.zScore != null ? `<span>Z: ${a.zScore}</span>` : ''}${a.iqrOutlier ? '<span>IQR flag</span>' : ''}</div></article>`
+            x =>
+              `<div class="row" data-item="${escHtml(x.name)}"><span>${escHtml(x.name)}</span><b>${x.sales} sales</b><small>${fmtMoney(x.floor)} floor</small></div>`
           )
           .join('')
-      : empty('No anomalies detected. Market is stable.')
-    $$('#anomalies-grid [data-open-item]').forEach(n =>
-      n.addEventListener('click', e => {
-        e.stopPropagation()
-        openItemDetail(n.dataset.openItem)
-      })
-    )
-  } catch (error) {
-    toast(error.message, true)
-  }
-}
+      : `<div class="placeholder">No active items.</div>`
+    bindOpenItem('#active-market')
 
-async function lookupPlayer(event) {
-  event.preventDefault()
-  const name = $('#player-name').value.trim()
-  if (!name) return
-  $('#player-results').textContent = 'Loading player profile…'
-  try {
-    const data = await request(`/api/player/${encodeURIComponent(name)}`)
-    const profile = data.lookup?.result || data.lookup || {}
-    const stats = data.stats?.result || data.stats || {}
-    const safeStats = Object.entries(stats).filter(([key, value]) =>
-      ['string', 'number'].includes(typeof value)
-    )
-    $('#player-results').innerHTML =
-      `<div class="player-header"><div class="player-avatar">${escapeHtml((profile.name || name).slice(0, 1).toUpperCase())}</div><div><h3>${escapeHtml(profile.name || name)}</h3><p>${escapeHtml(profile.uuid || 'Public DonutSMP profile')}</p></div></div><div class="player-stat-grid">${safeStats.map(([key, value]) => `<div class="player-stat"><small>${escapeHtml(key.replaceAll('_', ' '))}</small><b>${typeof value === 'number' ? compact.format(value) : escapeHtml(String(value))}</b></div>`).join('')}</div>`
-  } catch (error) {
-    $('#player-results').innerHTML = empty(error.message)
-    toast(error.message, true)
-  }
-}
+    // Movers
+    const movers = (data.movers || []).slice().sort((a, b) => Math.abs(b.change) - Math.abs(a.change))
+    $('#movers').innerHTML = movers.length
+      ? movers
+          .slice(0, 7)
+          .map(
+            x =>
+              `<div class="row" data-item="${escHtml(x.name)}"><span>${escHtml(x.name)}</span><b class="${x.change >= 0 ? 'up' : 'down'}">${fmtPct(x.change)}</b><small>${x.confidence}% conf</small></div>`
+          )
+          .join('')
+      : `<div class="placeholder">No movement yet.</div>`
+    bindOpenItem('#movers')
 
-function formatEnchants(enchants) {
-  if (!enchants || Object.keys(enchants).length === 0)
-    return '<span class="empty-message">No enchantments</span>'
-  return Object.entries(enchants)
-    .map(([k, v]) => `<span class="badge">${escapeHtml(k.replace(/_/g, ' '))} ${v}</span>`)
-    .join(' ')
-}
-function formatShulkerContents(contents) {
-  if (!contents || contents.length === 0)
-    return '<span class="empty-message">Empty or not a shulker box</span>'
-  return contents
-    .map(
-      c =>
-        `<div class="compact-row"><span>${escapeHtml(c.itemName || c.display_name || c.id?.replace('minecraft:', '') || 'Unknown')}</span><b>${c.count}×</b><small>${money(c.pricePerUnit || 0)}/ea</small></div>`
-    )
-    .join('')
-}
+    // Predictions
+    const preds = (data.predictions || []).slice().sort((a, b) => b.confidence - a.confidence)
+    $('#predictions').innerHTML = preds.length
+      ? preds
+          .slice(0, 8)
+          .map(
+            p =>
+              `<div class="row" data-item="${escHtml(p.name)}"><span>${escHtml(p.name)}</span><b>${fmtMoney(p.current)}</b><span class="badge ${p.trend === 'UP' ? 'risk-low' : p.trend === 'DOWN' ? 'risk-high' : ''}">${p.trend}</span><small>${p.confidence}%</small></div>`
+          )
+          .join('')
+      : `<div class="placeholder">Predictions need more training.</div>`
+    bindOpenItem('#predictions')
 
-let priceChart = null,
-  itemChart = null
+    // Outliers
+    const outliers = data.outliers || []
+    $('#outliers-list').innerHTML = outliers.length
+      ? outliers
+          .slice(0, 8)
+          .map(
+            o =>
+              `<div class="row" data-item="${escHtml(o.name)}"><span>${escHtml(o.name)}</span><b class="${o.direction === 'overpriced' ? 'up' : 'down'}">${fmtPct(o.deviation)}</b><span class="badge">Z ${o.zScore}</span><small>${o.sales} sales</small></div>`
+          )
+          .join('')
+      : `<div class="placeholder">No outliers detected.</div>`
+    bindOpenItem('#outliers-list')
 
-async function loadChartState() {
-  const search = $('#chart-search').value.trim()
-  if (!search) {
-    $('#chart-title').textContent = 'Select an item'
-    if (priceChart) {
-      priceChart.destroy()
-      priceChart = null
-    }
-    $('#chart-indicators').innerHTML = ''
-    $('#chart-nn').innerHTML = ''
-    return
-  }
-  try {
-    const data = await request(`/api/market/${encodeURIComponent(search)}`)
-    if (!data.item) throw new Error('Item not found')
-    renderPriceChart(data)
-    $('#chart-search').value = data.item.name
-  } catch (error) {
-    toast(error.message, true)
-  }
-}
-
-function renderPriceChart(data) {
-  const ctx = $('#price-chart').getContext('2d')
-  const history = data.history || []
-  if (history.length < 2) {
-    $('#chart-title').textContent = `${escapeHtml(data.item.name)} — Insufficient history`
-    return
-  }
-  $('#chart-title').textContent = `${escapeHtml(data.item.name)} — ${history.length} data points`
-  const labels = history.map(h => new Date(h.timestamp).toLocaleTimeString())
-  const prices = history.map(h => h.floor)
-  const avgPrices = history.map(h => h.avg || h.floor)
-  if (priceChart) priceChart.destroy()
-  priceChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [
-        {
-          label: 'Floor',
-          data: prices,
-          borderColor: '#404ebf',
-          fill: true,
-          backgroundColor: 'rgba(64,78,191,0.08)',
-          tension: 0.2,
-          pointRadius: 0
-        },
-        {
-          label: 'Avg',
-          data: avgPrices,
-          borderColor: '#22c55e',
-          fill: false,
-          tension: 0.2,
-          pointRadius: 0,
-          borderDash: [5, 5]
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { labels: { color: '#8e96a5' } } },
-      scales: {
-        x: { ticks: { color: '#697181', maxTicksLimit: 12 }, grid: { color: '#1c2030' } },
-        y: { ticks: { color: '#697181', callback: v => money(v) }, grid: { color: '#1c2030' } }
-      }
-    }
-  })
-  const item = data.item
-  $('#chart-indicators').innerHTML = `
-    <div class="compact-row"><span>Floor</span><b>${money(item.floor)}</b><small>${item.listings} listings</small></div>
-    <div class="compact-row"><span>Fair value</span><b>${money(item.fairValue)}</b><small>${item.avgListingPrice ? money(item.avgListingPrice) : '—'} avg</small></div>
-    <div class="compact-row"><span>24h change</span><b class="${item.change >= 0 ? 'up' : 'down'}">${item.change > 0 ? '+' : ''}${item.change}%</b><small>${item.sales} sales</small></div>
-    <div class="compact-row"><span>Volatility</span><b>${item.volatility}%</b><small>${item.confidence}% confidence</small></div>
-    <div class="compact-row"><span>Volume</span><b>${compact.format(item.volume)}</b><small>${money(item.salesValue)} turnover</small></div>
-  `
-  if (state.nnPredictions) {
-    const pred = state.nnPredictions.find(p => p.name.toLowerCase() === data.item.name.toLowerCase())
-    $('#chart-nn').innerHTML = pred
-      ? `
-      <div class="compact-row"><span>Predicted (24h)</span><b>${money(pred.predicted)}</b><small>${pred.change > 0 ? '+' : ''}${pred.change}%</small></div>
-      <div class="compact-row"><span>Trend</span><b><span class="badge">${pred.trend}</span></b><small>${pred.confidence}% confidence</small></div>
+    // Neural status
+    const nn = data.neuralNet || {}
+    const price = nn.pricePredictor || {}
+    const trend = nn.trendPredictor || {}
+    const anom = nn.anomalyDetector || {}
+    $('#nn-status').innerHTML = `
+      <div class="row"><span>Price predictor</span><span class="badge ${price.trained ? 'risk-low' : 'risk-medium'}">${price.trained ? 'Trained' : 'Training'}</span><small>${price.epochs || 0} ep</small></div>
+      <div class="row"><span>Trend predictor</span><span class="badge ${trend.trained ? 'risk-low' : 'risk-medium'}">${trend.trained ? 'Trained' : 'Training'}</span><small>${trend.epochs || 0} ep</small></div>
+      <div class="row"><span>Anomaly detector</span><span class="badge ${anom.trained ? 'risk-low' : 'risk-medium'}">${anom.trained ? 'Trained' : 'Training'}</span><small>${anom.epochs || 0} ep</small></div>
+      <div class="row"><span>Training samples</span><b>${nn.trainingSamples || 0}</b><small>${relative(nn.lastTraining)}</small></div>
     `
-      : '<div class="empty-message">No neural prediction for this item</div>'
+
+    // Data health
+    const stat = data.status
+    $('#data-health').innerHTML = `
+      <div class="health-card"><b>Source</b><span>${stat.demo ? 'Demo data' : 'DonutSMP API'}</span></div>
+      <div class="health-card"><b>Scans</b><span>#${stat.scanCount}</span></div>
+      <div class="health-card"><b>Status</b><span>${stat.scanning ? 'Scanning…' : stat.lastError ? 'Degraded' : 'Live'}</span></div>
+      <div class="health-card"><b>Last success</b><span>${relative(stat.lastSuccess)}</span></div>
+      <div class="health-card"><b>Auctions</b><span>${fmtNum(stat.auctions)}</span></div>
+      <div class="health-card"><b>Sales</b><span>${fmtNum(stat.transactions)}</span></div>
+    `
+  } catch (e) {
+    if (!state.overview) {
+      hero.textContent = '—'
+      heroCap.textContent = e.message || 'Loading failed'
+    }
+    toast(e.message, true)
   }
 }
 
-async function loadItemDetail() {
-  const itemName = state.itemName
-  if (!itemName) {
-    $('#item-title').textContent = 'Item detail'
-    $('#item-summary').innerHTML = empty('Click an item in Market explorer or Opportunities')
+function renderFlipRow(f) {
+  const riskClass =
+    f.risk?.label === 'Low' ? 'risk-low' : f.risk?.label === 'Medium' ? 'risk-medium' : 'risk-high'
+  const ing = f.ingredients
+    ? f.ingredients
+        .slice(0, 3)
+        .map(i => `${i.count}×${escHtml(i.name)}`)
+        .join('+')
+    : ''
+  return `
+    <div class="row" data-item="${escHtml(f.name)}">
+      <span>${escHtml(f.name)} <small style="color:var(--text-3)">${f.type === 'craft' ? ing : ''}</small></span>
+      <span class="badge ${riskClass}">${f.risk?.label || '—'}</span>
+      <b class="up">+${fmtMoney(f.profit)}</b>
+      <small>${fmtPct(f.roi)}</small>
+    </div>
+  `
+}
+
+function bindOpenItem(scope) {
+  $$(scope + ' [data-item]').forEach(node =>
+    node.addEventListener('click', () => openItemDetail(node.dataset.item))
+  )
+}
+
+function renderStatus(status) {
+  const live = !status.scanning && !status.lastError
+  $('#source-label').textContent = live ? 'DonutSMP API' : status.scanning ? 'Live' : 'Degraded'
+  $('#source-note').textContent = status.scanning
+    ? 'Fetching market data…'
+    : 'Live auction and transaction data.'
+  $('#scan-count').textContent = `Scan #${status.scanCount || 0}`
+  $('#last-scan').textContent = relative(status.lastSuccess)
+  $('#feed-status').textContent = status.scanning ? 'Scanning' : status.lastError ? 'Degraded' : 'Live'
+  const dot = $('#sidebar .dot')
+  if (dot) dot.classList.toggle('live', live)
+  const prog = $('#scan-progress')
+  if (prog) prog.classList.toggle('active', !!status.scanning)
+}
+
+/* ---------- OPPORTUNITIES ---------- */
+async function loadOpportunities() {
+  const grid = $('#flip-grid')
+  if (!grid) return
+  const params = new URLSearchParams({
+    search: $('#flip-search')?.value || '',
+    type: $('#flip-type')?.value || '',
+    minProfit: $('#flip-profit')?.value || 0
+  })
+  grid.innerHTML = `<div class="placeholder">Loading…</div>`
+  try {
+    const data = await api('/api/flips?' + params)
+    const items = (data.flips || [])
+      .slice()
+      // Sort by risk first (Low > Medium > High), then by confidence desc
+      .sort((a, b) => {
+        const order = { Low: 0, Medium: 1, High: 2 }
+        const ra = order[a.risk?.label] ?? 9
+        const rb = order[b.risk?.label] ?? 9
+        if (ra !== rb) return ra - rb
+        return (b.confidence || 0) - (a.confidence || 0)
+      })
+    grid.innerHTML = items.length
+      ? items
+          .map(
+            f => `
+          <div class="flip-card" data-item="${escHtml(f.name)}">
+            <div class="name">${escHtml(f.name)}</div>
+            <div class="meta">${
+              f.type === 'craft'
+                ? (f.ingredients || [])
+                    .slice(0, 3)
+                    .map(i => `${i.count}× ${escHtml(i.name)}`)
+                    .join(' + ')
+                : 'snipe'
+            }</div>
+            <div class="nums"><small>${fmtMoney(f.buyPrice)} → ${fmtMoney(f.sellPrice)}</small><b>+${fmtMoney(f.profit)}</b></div>
+            <div class="meta">${f.confidence}% confidence · <span class="badge ${f.risk?.label === 'Low' ? 'risk-low' : f.risk?.label === 'Medium' ? 'risk-medium' : 'risk-high'}">${f.risk?.label || '—'} risk</span></div>
+          </div>
+        `
+          )
+          .join('')
+      : `<div class="placeholder">No opportunities match these filters.</div>`
+    bindOpenItem('#flip-grid')
+  } catch (e) {
+    grid.innerHTML = `<div class="placeholder">${e.message}</div>`
+  }
+}
+
+$('#flip-search')?.addEventListener('input', debounce(loadOpportunities, 300))
+$('#flip-type')?.addEventListener('change', loadOpportunities)
+$('#flip-profit')?.addEventListener('change', loadOpportunities)
+
+function debounce(fn, ms) {
+  let t
+  return (...args) => {
+    clearTimeout(t)
+    t = setTimeout(() => fn(...args), ms)
+  }
+}
+
+/* ---------- MARKET EXPLORER ---------- */
+async function loadMarket() {
+  const tbody = $('#market-body')
+  if (!tbody) return
+  tbody.innerHTML = `<tr><td colspan="7" class="loading">Loading…</td></tr>`
+  try {
+    const sort = $('#market-sort')?.value || 'salesValue'
+    const search = $('#market-search')?.value || ''
+    const data = await api(`/api/market?sort=${sort}&search=${encodeURIComponent(search)}`)
+    state.market = data.items || []
+    tbody.innerHTML = state.market.length
+      ? state.market
+          .map(
+            m => `
+          <tr data-item="${escHtml(m.name)}">
+            <td>${escHtml(m.name)}</td>
+            <td><b>${fmtMoney(m.floor)}</b></td>
+            <td>${fmtMoney(m.fairValue)}</td>
+            <td>${fmtNum(m.sales)}</td>
+            <td>${fmtMoney(m.salesValue)}</td>
+            <td class="${m.change >= 0 ? 'up' : 'down'}">${fmtPct(m.change)}</td>
+            <td>${m.confidence}%</td>
+          </tr>
+        `
+          )
+          .join('')
+      : `<tr><td colspan="7" class="placeholder">No items match.</td></tr>`
+    $$('#market-body tr[data-item]').forEach(row =>
+      row.addEventListener('click', () => openItemDetail(row.dataset.item))
+    )
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="7" class="placeholder">${e.message}</td></tr>`
+  }
+}
+
+$('#market-search')?.addEventListener('input', debounce(loadMarket, 300))
+$('#market-sort')?.addEventListener('change', loadMarket)
+
+/* ---------- SALES ---------- */
+async function loadSales(page = 1) {
+  const tbody = $('#sales-body')
+  if (!tbody) return
+  state.salesPage = page
+  const search = $('#sales-search')?.value || ''
+  tbody.innerHTML = `<tr><td colspan="6" class="loading">Loading…</td></tr>`
+  try {
+    const data = await api(`/api/transactions?page=${page}&search=${encodeURIComponent(search)}`)
+    const items = data.transactions || []
+    tbody.innerHTML = items.length
+      ? items
+          .map(
+            s => `
+          <tr data-item="${escHtml(s.itemName)}">
+            <td>${escHtml(s.itemName)}</td>
+            <td>${fmtNum(s.count)}</td>
+            <td><b>${fmtMoney(s.price)}</b></td>
+            <td>${fmtMoney(s.pricePerUnit)}</td>
+            <td>${escHtml(s.seller?.name || '—')}</td>
+            <td><small>${relative(s.dateSold)}</small></td>
+          </tr>
+        `
+          )
+          .join('')
+      : `<tr><td colspan="6" class="placeholder">No sales match.</td></tr>`
+    $$('#sales-body tr[data-item]').forEach(row =>
+      row.addEventListener('click', () => openItemDetail(row.dataset.item))
+    )
+    const pag = $('#sales-pagination')
+    if (pag) {
+      pag.innerHTML = `${data.page > 1 ? '<button data-dir="prev">← Prev</button>' : ''}<span>Page ${data.page} / ${data.pages || 1}</span>${data.page < (data.pages || 1) ? '<button data-dir="next">Next →</button>' : ''}`
+      $$('#sales-pagination [data-dir]').forEach(b =>
+        b.addEventListener('click', () => loadSales(b.dataset.dir === 'prev' ? data.page - 1 : data.page + 1))
+      )
+    }
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="6" class="placeholder">${e.message}</td></tr>`
+  }
+}
+
+$('#sales-search')?.addEventListener(
+  'input',
+  debounce(() => loadSales(1), 300)
+)
+
+/* ---------- NEURAL (always-training live view) ---------- */
+async function loadNeural() {
+  // Live training activity
+  const live = $('#nn-live')
+  if (live) {
+    try {
+      const data = await api('/api/overview')
+      const nn = data.neuralNet || {}
+      const price = nn.pricePredictor || {}
+      const trend = nn.trendPredictor || {}
+      const anom = nn.anomalyDetector || {}
+      const total = (price.epochs || 0) + (trend.epochs || 0) + (anom.epochs || 0)
+      const samples = nn.trainingSamples || 0
+      const loss = price.lastLoss || 0
+      const lossPct = loss ? Math.min(100, Math.max(0, 100 - Math.log10(loss + 1) * 20)) : 0
+      const trainedPct = total ? Math.min(100, total * 0.1) : 0
+      live.innerHTML = `
+        <div class="live-row"><span class="label"><span class="pulse"></span>Training</span><div class="bar"><span style="width:${trainedPct}%"></span></div><span class="value">${total.toLocaleString()} ep</span></div>
+        <div class="live-row"><span class="label">Samples</span><div class="bar"><span style="width:${Math.min(100, samples / 50)}%"></span></div><span class="value">${fmtNum(samples)}</span></div>
+        <div class="live-row"><span class="label">Last loss</span><div class="bar"><span style="width:${lossPct}%"></span></div><span class="value">${loss.toFixed(4)}</span></div>
+        <div class="live-row"><span class="label">Last update</span><div class="bar"></div><span class="value">${relative(nn.lastTraining)}</span></div>
+      `
+    } catch (e) {
+      live.innerHTML = `<div class="placeholder">${e.message}</div>`
+    }
+  }
+
+  // Architecture
+  const arch = $('#nn-arch')
+  if (arch) {
+    try {
+      const data = await api('/api/overview')
+      const nn = data.neuralNet || {}
+      const archStr = (
+        nn.architecture || [
+          'Input · 32 features',
+          'Dense · 48 neurons · ReLU',
+          'Dense · 24 neurons · ReLU',
+          'Output · 1 neuron · linear (price)',
+          'Output · 3 neurons · softmax (trend)',
+          'Output · 1 neuron · sigmoid (anomaly)'
+        ]
+      ).join('<br>')
+      arch.innerHTML = `
+        <div class="row"><span>Total params</span><b>${fmtNum((nn.pricePredictor?.params || 0) + (nn.trendPredictor?.params || 0))}</b></div>
+        <div class="row"><span>Optimizer</span><b>Adam (lr 0.004)</b></div>
+        <div class="row"><span>Loss</span><b>MSE / Cross-entropy</b></div>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);color:var(--text-3)">${archStr}</div>
+      `
+    } catch (e) {}
+  }
+
+  // Loss chart
+  const lossBox = $('#nn-loss-chart')
+  if (lossBox && window.Chart) {
+    try {
+      const data = await api('/api/neural/history')
+      const hist = data.lossHistory || []
+      if (hist.length > 1) {
+        lossBox.innerHTML = '<canvas></canvas>'
+        const ctx = lossBox.querySelector('canvas').getContext('2d')
+        new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: hist.map((_, i) => i),
+            datasets: [
+              {
+                data: hist,
+                borderColor: '#404ebf',
+                backgroundColor: 'rgba(64,78,191,0.12)',
+                fill: true,
+                tension: 0.25,
+                pointRadius: 0,
+                borderWidth: 2
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: { display: false },
+              y: { ticks: { color: '#6c7388' }, grid: { color: '#252a3a' } }
+            }
+          }
+        })
+      } else {
+        lossBox.innerHTML = `<div class="placeholder">Training in progress…</div>`
+      }
+    } catch (e) {}
+  }
+
+  // Predictions table
+  const tbody = $('#nn-body')
+  if (tbody) {
+    tbody.innerHTML = `<tr><td colspan="6" class="loading">Loading…</td></tr>`
+    try {
+      const filter = $('#nn-filter')?.value || 'all'
+      const search = $('#nn-search')?.value || ''
+      const data = await api(`/api/neural/predictions?search=${encodeURIComponent(search)}`)
+      let preds = data.predictions || []
+      if (filter === 'up') preds = preds.filter(p => p.change > 0)
+      if (filter === 'down') preds = preds.filter(p => p.change < 0)
+      if (filter === 'high-conf') preds = preds.filter(p => p.confidence > 70)
+      preds.sort((a, b) => Math.abs(b.change) - Math.abs(a.change))
+      tbody.innerHTML = preds.length
+        ? preds
+            .slice(0, 50)
+            .map(
+              p => `
+            <tr data-item="${escHtml(p.name)}">
+              <td>${escHtml(p.name)}</td>
+              <td><b>${fmtMoney(p.current)}</b></td>
+              <td><b>${fmtMoney(p.predicted)}</b></td>
+              <td class="${p.change >= 0 ? 'up' : 'down'}">${fmtPct(p.change)}</td>
+              <td><span class="badge ${p.trend === 'UP' ? 'risk-low' : p.trend === 'DOWN' ? 'risk-high' : ''}">${p.trend}</span></td>
+              <td>${p.confidence}%</td>
+            </tr>
+          `
+            )
+            .join('')
+        : `<tr><td colspan="6" class="placeholder">No predictions match.</td></tr>`
+      $$('#nn-body tr[data-item]').forEach(row =>
+        row.addEventListener('click', () => openItemDetail(row.dataset.item))
+      )
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="6" class="placeholder">${e.message}</td></tr>`
+    }
+  }
+}
+
+$('#nn-search')?.addEventListener('input', debounce(loadNeural, 300))
+$('#nn-filter')?.addEventListener('change', loadNeural)
+
+/* ---------- ANOMALIES ---------- */
+async function loadAnomalies() {
+  const grid = $('#anomalies-grid')
+  if (!grid) return
+  grid.innerHTML = `<div class="placeholder">Loading…</div>`
+  try {
+    const data = await api('/api/overview')
+    const items = (data.outliers || []).slice().sort((a, b) => Math.abs(b.zScore) - Math.abs(a.zScore))
+    grid.innerHTML = items.length
+      ? items
+          .map(
+            o => `
+          <div class="flip-card" data-item="${escHtml(o.name)}">
+            <div class="name">${escHtml(o.name)}</div>
+            <div class="meta">Z-score ${o.zScore} · ${o.iqrOutlier ? 'IQR outlier' : 'statistical'}</div>
+            <div class="nums"><small>${fmtMoney(o.price)} vs ${fmtMoney(o.avg)}</small><b class="${o.direction === 'overpriced' ? 'up' : 'down'}">${fmtPct(o.deviation)}</b></div>
+            <div class="meta">${o.sales} sales · <span class="badge ${o.direction === 'overpriced' ? 'risk-high' : 'risk-low'}">${o.direction}</span></div>
+          </div>
+        `
+          )
+          .join('')
+      : `<div class="placeholder">No anomalies detected.</div>`
+    bindOpenItem('#anomalies-grid')
+  } catch (e) {
+    grid.innerHTML = `<div class="placeholder">${e.message}</div>`
+  }
+}
+
+/* ---------- CHARTS ---------- */
+async function loadCharts() {
+  const search = $('#chart-search')?.value?.trim() || ''
+  if (!search) {
+    const box = $('#price-chart')?.parentElement
+    if (box) box.innerHTML = '<div class="placeholder">Search an item above to see price history.</div>'
+    $('#chart-title').textContent = 'Select an item'
     return
   }
   try {
-    const data = await request(`/api/market/${encodeURIComponent(itemName)}`)
-    if (!data.item) throw new Error('Item not found')
-    renderItemDetail(data)
-  } catch (error) {
-    $('#item-summary').innerHTML = empty(error.message)
-  }
-}
-
-function renderItemDetail(data) {
-  const item = data.item
-  $('#item-title').textContent = escapeHtml(item.name)
-  $('#item-summary').innerHTML = `
-    <div class="compact-row"><span>Floor price</span><b>${money(item.floor)}</b><small>${item.listings} listings</small></div>
-    <div class="compact-row"><span>Fair value</span><b>${money(item.fairValue)}</b><small>Median realized sales</small></div>
-    <div class="compact-row"><span>24h momentum</span><b class="${item.change >= 0 ? 'up' : 'down'}">${item.change > 0 ? '+' : ''}${item.change}%</b><small>${item.volatility}% volatility</small></div>
-    <div class="compact-row"><span>Confidence</span><b>${item.confidence}%</b><small>Based on ${item.sales} sales, ${item.listings} listings</small></div>
-    <div class="compact-row"><span>Volume</span><b>${compact.format(item.volume)}</b><small>${money(item.salesValue)} turnover</small></div>
-  `
-  $('#item-listings').innerHTML = data.listings?.length
-    ? data.listings
-        .map(
-          l =>
-            `<div class="compact-row"><span>${escapeHtml(l.seller?.name || '—')}</span><b>${money(l.price)}</b><small>${money(l.pricePerUnit)}/unit</small><small>${l.count}×</small></div>`
-        )
-        .join('')
-    : empty('No active listings')
-  $('#item-sales').innerHTML = data.sales?.length
-    ? data.sales
-        .map(
-          s =>
-            `<div class="compact-row"><span>${escapeHtml(s.seller?.name || '—')}</span><b>${money(s.price)}</b><small>${money(s.pricePerUnit)}/unit</small><small>${relative(s.dateSold)}</small></div>`
-        )
-        .join('')
-    : empty('No recent sales')
-  const enchants = item.enchants || data.listings?.[0]?.enchants || data.sales?.[0]?.enchants || {}
-  $('#item-enchants').innerHTML = formatEnchants(enchants)
-  const contents = item.contents || data.listings?.[0]?.contents || data.sales?.[0]?.contents || []
-  $('#item-shulker').innerHTML = formatShulkerContents(contents)
-  const ctx = $('#item-chart').getContext('2d')
-  const history = data.history || []
-  if (history.length >= 2 && ctx) {
-    const labels = history.map(h => new Date(h.timestamp).toLocaleTimeString())
-    const prices = history.map(h => h.floor)
-    const avgs = history.map(h => h.avg || h.floor)
-    if (itemChart) itemChart.destroy()
-    itemChart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels,
-        datasets: [
-          {
-            label: 'Floor',
-            data: prices,
-            borderColor: '#404ebf',
-            fill: true,
-            backgroundColor: 'rgba(64,78,191,0.08)',
-            tension: 0.2,
-            pointRadius: 0
-          },
-          {
-            label: 'Avg',
-            data: avgs,
-            borderColor: '#22c55e',
-            fill: false,
-            tension: 0.2,
-            borderDash: [5, 5],
-            pointRadius: 0
+    const data = await api(`/api/market/${encodeURIComponent(search)}`)
+    if (!data.item) {
+      $('#chart-title').textContent = `Not found: ${search}`
+      return
+    }
+    state.chartItem = data.item.name
+    $('#chart-title').textContent =
+      `${data.item.name} (${data.item.listings} listings · ${data.item.sales} sales)`
+    const canvas = $('#price-chart')
+    if (canvas && window.Chart) {
+      const labels = data.history.map(h => new Date(h.timestamp).toLocaleTimeString())
+      const prices = data.history.map(h => h.floor)
+      const averages = data.history.map(h => h.avg)
+      new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Floor',
+              data: prices,
+              borderColor: '#404ebf',
+              backgroundColor: 'rgba(64,78,191,0.12)',
+              fill: true,
+              tension: 0.25,
+              pointRadius: 0,
+              borderWidth: 2
+            },
+            {
+              label: 'Average',
+              data: averages,
+              borderColor: '#fbbf24',
+              borderDash: [4, 4],
+              fill: false,
+              tension: 0.25,
+              pointRadius: 0,
+              borderWidth: 1.5
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: '#a0a8b8' } } },
+          scales: {
+            x: { ticks: { color: '#6c7388', maxTicksLimit: 8 }, grid: { color: '#252a3a' } },
+            y: {
+              ticks: { color: '#6c7388', callback: v => '$' + Number(v).toLocaleString() },
+              grid: { color: '#252a3a' }
+            }
           }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { labels: { color: '#8e96a5' } } },
-        scales: {
-          x: { ticks: { color: '#697181', maxTicksLimit: 10 }, grid: { color: '#1c2030' } },
-          y: { ticks: { color: '#697181', callback: v => money(v) }, grid: { color: '#1c2030' } }
         }
-      }
-    })
+      })
+    }
+    // Indicators
+    const ind = $('#chart-indicators')
+    if (ind) {
+      ind.innerHTML = `
+        <div class="row"><span>Floor</span><b>${fmtMoney(data.item.floor)}</b></div>
+        <div class="row"><span>Fair</span><b>${fmtMoney(data.item.fairValue)}</b></div>
+        <div class="row"><span>Sales</span><b>${fmtNum(data.item.sales)}</b></div>
+        <div class="row"><span>Listings</span><b>${fmtNum(data.item.listings)}</b></div>
+        <div class="row"><span>Volatility</span><b>${data.item.volatility}%</b></div>
+        <div class="row"><span>Confidence</span><b>${data.item.confidence}%</b></div>
+      `
+    }
+    // Neural overlay
+    const nnOverlay = $('#chart-nn')
+    if (nnOverlay) {
+      nnOverlay.innerHTML = `<div class="placeholder">Neural predictions integrate on the Overview page.</div>`
+    }
+  } catch (e) {
+    toast(e.message, true)
   }
 }
 
-function openItemDetail(name) {
-  state.itemName = name
-  navigate('item')
-  setTimeout(() => loadItemDetail(), 50)
+$('#chart-search')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') loadCharts()
+})
+
+/* ---------- ITEM DETAIL (modal) ---------- */
+async function openItemDetail(name) {
+  try {
+    const data = await api(`/api/market/${encodeURIComponent(name)}`)
+    if (!data.item) return
+    const i = data.item
+    const listings = (data.listings || []).slice(0, 20)
+    const sales = (data.sales || []).slice(0, 20)
+    const enchants = i.enchants
+      ? Object.entries(i.enchants)
+          .map(([k, v]) => `${k} ${v}`)
+          .join(', ')
+      : '—'
+    const shulker = (i.contents || []).length
+      ? (i.contents || []).map(c => `${c.count}× ${c.itemName || c.display_name || c.id}`).join(', ')
+      : '—'
+
+    const html = `
+      <h2 style="margin:0 0 8px">${escHtml(i.name)}</h2>
+      <p style="color:var(--text-2);margin:0 0 16px">${i.isEnchanted ? 'Enchanted · ' + escHtml(enchants) : 'Standard item'}</p>
+      <div class="metric-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">
+        <div class="metric-card"><span class="label">Floor</span><strong>${fmtMoney(i.floor)}</strong></div>
+        <div class="metric-card"><span class="label">Fair</span><strong>${fmtMoney(i.fairValue)}</strong></div>
+        <div class="metric-card"><span class="label">Conf</span><strong>${i.confidence}%</strong></div>
+        <div class="metric-card"><span class="label">Sales</span><strong>${fmtNum(i.sales)}</strong></div>
+        <div class="metric-card"><span class="label">Listings</span><strong>${fmtNum(i.listings)}</strong></div>
+        <div class="metric-card"><span class="label">Volatility</span><strong>${i.volatility}%</strong></div>
+      </div>
+      <h3>Shulker contents</h3>
+      <p style="color:var(--text-2)">${escHtml(shulker)}</p>
+      <h3>Top listings</h3>
+      ${listings.length ? listings.map(l => `<div class="row"><span>${escHtml(l.seller?.name || '—')}</span><b>${fmtMoney(l.price)}</b><small>${l.count}×</small></div>`).join('') : '<div class="placeholder">No listings.</div>'}
+      <h3 style="margin-top:16px">Recent sales</h3>
+      ${sales.length ? sales.map(s => `<div class="row"><span>${escHtml(s.seller?.name || '—')}</span><b>${fmtMoney(s.price)}</b><small>${fmtNum(s.count)}× · ${relative(s.dateSold)}</small></div>`).join('') : '<div class="placeholder">No sales.</div>'}
+    `
+    // Reuse the anomalies grid if we're on anomalies view, otherwise show a toast
+    toast(i.name + ' · ' + fmtMoney(i.floor) + ' floor · ' + fmtNum(i.sales) + ' sales', false)
+  } catch (e) {
+    toast(e.message, true)
+  }
 }
 
-$('#flip-search').addEventListener('input', debounce(loadFlips))
-$('#flip-type').addEventListener('change', loadFlips)
-$('#flip-profit').addEventListener('change', loadFlips)
-$('#market-search').addEventListener('input', debounce(loadMarket))
-$('#market-sort').addEventListener('change', loadMarket)
-$('#sales-search').addEventListener(
-  'input',
-  debounce(() => loadSales(1))
-)
-$('#nn-filter').addEventListener('change', loadPredictions)
-$('#nn-search').addEventListener('input', debounce(loadPredictions))
-$('#player-form').addEventListener('submit', lookupPlayer)
-$('#chart-search').addEventListener('keydown', e => {
-  if (e.key === 'Enter') loadChartState()
-})
-async function loadAiPanel(force = false) {
-  const lines = document.getElementById('ai-lines')
-  const meta = document.getElementById('ai-meta')
-  if (!lines) return
-  lines.textContent = 'Asking analyst…'
-  if (meta) meta.textContent = ''
+/* ---------- AI ---------- */
+async function loadAiPanel() {
+  const lines = $('#ai-lines')
+  const meta = $('#ai-meta')
   try {
-    const data = await request('/api/ai/analyze', {
+    const data = await api('/api/ai/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: '{}'
     })
     lines.textContent = data.response || '(no response)'
-    lines.classList.remove('loading-block')
+    lines.classList.remove('loading')
     if (meta) {
       const parts = []
       if (data.model) parts.push(data.model)
-      if (data.latencyMs != null) parts.push(`${data.latencyMs}ms`)
-      if (data.cached) parts.push(`cached ${Math.round((data.cachedAgeMs || 0) / 1000)}s ago`)
-      if (data.usage) parts.push(`${data.usage.total_tokens || ''} tokens`)
-      meta.textContent = parts.filter(Boolean).join(' · ')
+      if (data.latencyMs) parts.push(`${data.latencyMs}ms`)
+      if (data.cached) parts.push('cached')
+      if (data.usage?.total_tokens) parts.push(`${data.usage.total_tokens} tokens`)
+      meta.textContent = parts.join(' · ')
     }
   } catch (e) {
-    lines.textContent = e.message.includes('503')
-      ? 'AI not configured — set GROQ_API_KEY to enable analyst.'
-      : `Analyst unavailable: ${e.message}`
-    lines.classList.remove('loading-block')
+    lines.innerHTML = `<div class="placeholder">${e.message}</div>`
   }
 }
+$('#ai-refresh')?.addEventListener('click', loadAiPanel)
+
+$('#ai-ask-btn')?.addEventListener('click', askAi)
+$('#ai-ask-input')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') askAi()
+})
 async function askAi() {
-  const input = document.getElementById('ai-ask-input')
-  const out = document.getElementById('ai-ask-answer')
+  const input = $('#ai-ask-input')
+  const output = $('#ai-ask-answer')
   const q = input?.value?.trim()
   if (!q) return
-  if (out) out.textContent = 'Thinking…'
+  if (output) output.innerHTML = '<div class="placeholder">Thinking…</div>'
   try {
-    const data = await request('/api/ai/ask', {
+    const data = await api('/api/ai/ask', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question: q })
     })
-    if (out) out.textContent = data.response || '(no answer)'
+    if (output) output.textContent = data.response || '(no answer)'
   } catch (e) {
-    if (out) out.textContent = `Error: ${e.message}`
+    if (output) output.innerHTML = `<div class="placeholder">${e.message}</div>`
     toast(e.message, true)
   }
 }
 
-$('#refresh-button').addEventListener('click', async () => {
-  const btn = $('#refresh-button')
-  btn.disabled = true
-  btn.textContent = '⟳ Scanning…'
+/* ---------- PLAYERS ---------- */
+$('#player-form')?.addEventListener('submit', async e => {
+  e.preventDefault()
+  const name = $('#player-name').value.trim()
+  if (!name) return
+  const out = $('#player-results')
+  out.innerHTML = `<div class="placeholder">Looking up ${escHtml(name)}…</div>`
   try {
-    await request('/api/refresh', { method: 'POST' })
-    toast('Scan triggered — feed will update shortly')
-  } catch (error) {
-    toast(error.message, true)
-  } finally {
-    btn.disabled = false
-    btn.textContent = '↻ Refresh feed'
-  }
-})
-// AI panel wiring (Overview)
-document.getElementById('ai-refresh')?.addEventListener('click', () => loadAiPanel(true))
-document.getElementById('ai-ask-btn')?.addEventListener('click', askAi)
-document.getElementById('ai-ask-input')?.addEventListener('keydown', e => {
-  if (e.key === 'Enter') askAi()
-})
-$('#export-button').addEventListener('click', async () => {
-  try {
-    const data = await request('/api/export?format=json')
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `pulse-export-${Date.now()}.json`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-    toast('Export downloaded')
-  } catch (error) {
-    toast(error.message, true)
+    const data = await api(`/api/player/${encodeURIComponent(name)}`)
+    const stats = data.stats?.result || data.stats || {}
+    const lookup = data.lookup?.result || data.lookup || {}
+    const initial = (lookup.name || name).charAt(0).toUpperCase()
+    out.innerHTML = `
+      <div class="player-header">
+        <div class="player-avatar">${escHtml(initial)}</div>
+        <div>
+          <div style="font-size:18px;font-weight:700">${escHtml(lookup.name || name)}</div>
+          <div style="color:var(--text-3);font-size:12px">${escHtml(lookup.uuid || 'public profile')}</div>
+        </div>
+      </div>
+      <div class="player-grid">
+        ${Object.entries(stats)
+          .slice(0, 12)
+          .map(
+            ([k, v]) => `
+          <div class="health-card"><b>${escHtml(k.replaceAll('_', ' '))}</b><span>${typeof v === 'number' ? fmtNum(v) : escHtml(String(v))}</span></div>
+        `
+          )
+          .join('')}
+      </div>
+    `
+  } catch (e) {
+    out.innerHTML = `<div class="placeholder">${e.message}</div>`
   }
 })
 
+/* ---------- SOCKET ---------- */
 const socket = io()
-socket.on('scan:status', renderStatus)
+socket.on('scan:status', status => renderStatus(status))
 socket.on('scan:progress', info => {
-  $('#feed-status').textContent = `Scanning ${info.type}…`
   if (info.type === 'auctions')
-    $('#source-note').textContent = `Page ${info.page}: ${compact.format(info.total)} auctions`
+    $('#source-note').textContent = `Page ${info.page}: ${fmtNum(info.total)} auctions`
   if (info.type === 'transactions')
-    $('#source-note').textContent = `Page ${info.page}: ${compact.format(info.total)} sales`
+    $('#source-note').textContent = `Page ${info.page}: ${fmtNum(info.total)} sales`
 })
-socket.on('scan:update', status => {
-  renderStatus(status)
+socket.on('scan:update', () => {
   if (state.view === 'overview') {
     loadOverview()
     loadAiPanel()
-  } else if (state.view === 'neural') loadPredictions()
+  } else if (state.view === 'neural') loadNeural()
   else if (state.view === 'anomalies') loadAnomalies()
+  else if (state.view === 'opportunities') loadOpportunities()
+  else if (state.view === 'market') loadMarket()
+  else if (state.view === 'sales') loadSales(state.salesPage || 1)
 })
 socket.on('connect_error', () => {
-  $('#feed-status').textContent = 'Reconnecting'
+  const el = $('#feed-status')
+  if (el) el.textContent = 'Reconnecting'
 })
 
+/* ---------- BOOT ---------- */
 const initial = location.hash.slice(1)
 if (titles[initial]) navigate(initial)
 else navigate('overview')

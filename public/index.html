@@ -5,310 +5,187 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta
       name="description"
-      content="Live DonutSMP market — filtered prices, enchantment-aware flips, and neural forecasts."
+      content="Live DonutSMP market — filtered prices, enchantment-aware flips, neural forecasts."
     />
     <meta name="theme-color" content="#0c0e14" />
-    <meta property="og:title" content="Pulse — DonutSMP Market" />
-    <meta
-      property="og:description"
-      content="Filtered asking prices, transaction-anchored fair value, and confidence-aware flips."
-    />
-    <meta property="og:type" content="website" />
-    <meta property="og:image" content="/pulse-logo.png" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <title>Pulse — DonutSMP</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
-      rel="stylesheet"
-    />
     <link rel="stylesheet" href="/css/style.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   </head>
   <body>
     <div class="app-shell">
       <aside class="sidebar" id="sidebar">
-        <a class="brand" href="#overview" aria-label="Pulse">
-          <span class="brand-mark">
-            <svg viewBox="0 0 36 36" width="36" height="36" aria-hidden="true">
-              <defs>
-                <linearGradient id="bg2" x1="0" y1="0" x2="36" y2="36" gradientUnits="userSpaceOnUse">
-                  <stop offset="0%" stop-color="#5563d1" />
-                  <stop offset="100%" stop-color="#404ebf" />
-                </linearGradient>
-              </defs>
-              <rect width="36" height="36" rx="10" fill="url(#bg2)" />
-              <path
-                d="M4 18 H11 L13 10 L15 26 L18 5 L21 23 L23 15 H32"
-                fill="none"
-                stroke="white"
-                stroke-width="2.3"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          </span>
-          <span class="brand-text"><b>Pulse</b><small>DonutSMP</small></span>
-        </a>
+        <div class="brand">
+          <svg viewBox="0 0 36 36" width="36" height="36">
+            <defs>
+              <linearGradient id="bg" x1="0" y1="0" x2="36" y2="36" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stop-color="#5563d1" />
+                <stop offset="100%" stop-color="#404ebf" />
+              </linearGradient>
+            </defs>
+            <rect width="36" height="36" rx="10" fill="url(#bg)" />
+            <path
+              d="M4 18 H11 L13 10 L15 26 L18 5 L21 23 L23 15 H32"
+              fill="none"
+              stroke="white"
+              stroke-width="2.3"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          <div>
+            <b>Pulse</b>
+            <small>DonutSMP</small>
+          </div>
+        </div>
 
-        <nav aria-label="Primary">
+        <nav>
           <p class="nav-label">Market</p>
-          <button class="nav-link active" data-view="overview">
-            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
-              <rect x="1" y="9" width="3" height="5" rx="1" fill="currentColor" opacity=".7" />
-              <rect x="6" y="5" width="3" height="9" rx="1" fill="currentColor" />
-              <rect x="11" y="1" width="3" height="13" rx="1" fill="currentColor" opacity=".45" />
-            </svg>
-            Overview
-          </button>
+          <button class="nav-link active" data-view="overview">Overview</button>
           <button class="nav-link" data-view="opportunities">
-            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
-              <path
-                d="M2 11L7 6l3 3 3-4"
-                stroke="currentColor"
-                stroke-width="1.6"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-              <path
-                d="M9 5h4v4"
-                stroke="currentColor"
-                stroke-width="1.6"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
             Opportunities <em id="nav-opportunities">0</em>
           </button>
-          <button class="nav-link" data-view="market">
-            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
-              <rect x="1.5" y="2" width="12" height="11" rx="1.5" stroke="currentColor" stroke-width="1.4" />
-              <path d="M1.5 5.5h12M5.5 2v11" stroke="currentColor" stroke-width="1.2" />
-            </svg>
-            Explorer
-          </button>
-          <button class="nav-link" data-view="sales">
-            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
-              <path d="M2 7.5h11M7.5 2v11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
-              <circle cx="7.5" cy="7.5" r="5" stroke="currentColor" stroke-width="1.2" opacity=".45" />
-            </svg>
-            Sales
-          </button>
+          <button class="nav-link" data-view="market">Explorer</button>
+          <button class="nav-link" data-view="sales">Sales</button>
+
           <p class="nav-label">Intelligence</p>
-          <button class="nav-link" data-view="neural">
-            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
-              <path
-                d="M2 7.5h3l1.5-3 2 6L10 4h3"
-                stroke="currentColor"
-                stroke-width="1.4"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-              <circle cx="7.5" cy="7.5" r="6.2" stroke="currentColor" stroke-width="1" opacity=".25" />
-            </svg>
-            Neural
-          </button>
-          <button class="nav-link" data-view="anomalies">
-            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
-              <path
-                d="M7.5 2L2 12.5h11L7.5 2z"
-                stroke="currentColor"
-                stroke-width="1.3"
-                stroke-linejoin="round"
-              />
-              <path d="M7.5 6v3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
-            </svg>
-            Anomalies
-          </button>
-          <button class="nav-link" data-view="charts">
-            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
-              <path
-                d="M1.5 11.5l3-4 2.5 2 4-7"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-            Charts
-          </button>
-          <button class="nav-link" data-view="item">
-            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
-              <path
-                d="M7.5 2l5.2 3v6L7.5 14 2.3 11V5z"
-                stroke="currentColor"
-                stroke-width="1.3"
-                stroke-linejoin="round"
-              />
-              <path d="M2.3 5l5.2 3 5.2-3M7.5 8v6" stroke="currentColor" stroke-width="1.2" />
-            </svg>
-            Item
-          </button>
+          <button class="nav-link" data-view="neural">Neural</button>
+          <button class="nav-link" data-view="anomalies">Anomalies</button>
+          <button class="nav-link" data-view="charts">Charts</button>
+
           <p class="nav-label">Lookup</p>
-          <button class="nav-link" data-view="players">
-            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
-              <circle cx="7.5" cy="5.2" r="2.6" stroke="currentColor" stroke-width="1.4" />
-              <path
-                d="M2.5 12.5a5 5 0 0110 0"
-                stroke="currentColor"
-                stroke-width="1.4"
-                stroke-linecap="round"
-              />
-            </svg>
-            Players
-          </button>
+          <button class="nav-link" data-view="players">Players</button>
         </nav>
 
-        <div class="source-card">
-          <div class="source-row">
-            <span><i class="live-dot"></i>Data source</span><b id="source-label">Connecting</b>
+        <div class="status-card">
+          <div class="status-row">
+            <span><i class="dot"></i>Source</span>
+            <b id="source-label">—</b>
           </div>
-          <p id="source-note">Preparing feed…</p>
-          <div class="freshness"><span id="scan-count">—</span><span id="last-scan">—</span></div>
-          <div id="scan-progress" class="scan-progress"><div class="bar"></div></div>
+          <p id="source-note">Connecting…</p>
+          <div class="status-row"><span>Scan</span><b id="scan-count">—</b></div>
+          <div class="status-row"><span>Last</span><b id="last-scan">—</b></div>
+          <div id="scan-progress"><div class="bar"></div></div>
         </div>
       </aside>
 
       <main>
         <header class="topbar">
-          <button class="menu-button" id="menu-button" aria-label="Toggle menu">☰</button>
+          <button id="menu-button">☰</button>
           <div class="topbar-title">
-            <p class="eyebrow" id="page-eyebrow">Pulse</p>
+            <span id="page-eyebrow" class="eyebrow">Pulse</span>
             <h1 id="page-title">Overview</h1>
           </div>
-          <div class="top-actions">
-            <span class="status-pill"><i class="live-dot"></i><span id="feed-status">Syncing</span></span>
-            <button class="button secondary" id="export-button">Export</button>
-            <button class="button secondary" id="refresh-button">Refresh</button>
+          <div class="topbar-actions">
+            <span id="feed-status" class="pill">—</span>
+            <button id="export-button" class="btn">Export</button>
+            <button id="refresh-button" class="btn">Refresh</button>
           </div>
         </header>
 
-        <!-- Overview -->
-        <section id="view-overview" class="view active">
+        <!-- OVERVIEW -->
+        <section id="view-overview" class="view active" data-view="overview">
           <div class="hero">
-            <div class="hero-copy">
-              <p class="kicker">Live market</p>
-              <h2>Pulse</h2>
-              <p>Filtered asking prices, transaction-anchored fair value, and confidence-aware flips.</p>
+            <div class="hero-left">
+              <span class="eyebrow">Live market</span>
+              <h2>DonutSMP Pulse</h2>
+              <p>Filtered prices · Enchantment-aware flips · Neural forecasts</p>
             </div>
-            <div class="hero-signal">
-              <div class="signal-orbit"><span id="hero-score">—</span><small>signals</small></div>
-              <p id="hero-caption">Analyzing the market</p>
+            <div class="hero-right">
+              <div class="hero-stat"><b id="hero-score">—</b><span>signals</span></div>
+              <div class="hero-meta" id="hero-caption">Waiting for data…</div>
             </div>
           </div>
 
-          <div class="metric-grid" id="metric-grid"></div>
+          <div id="metric-grid" class="metric-grid"></div>
 
-          <article class="panel" id="ai-panel">
-            <div class="panel-head">
-              <div>
-                <p class="kicker">Analyst</p>
-                <h3>One-liners</h3>
-              </div>
-              <button class="button secondary button-sm" id="ai-refresh">Refresh</button>
-            </div>
-            <div id="ai-lines" class="mono-list loading-block"></div>
-            <p id="ai-meta" class="meta"></p>
+          <section class="card" id="ai-panel">
+            <header>
+              <span class="eyebrow">Groq Analyst</span>
+              <strong>One-liners</strong>
+              <button id="ai-refresh" class="btn-small">Refresh</button>
+            </header>
+            <div id="ai-lines" class="ai-lines"><div class="loading">Asking analyst…</div></div>
+            <div id="ai-meta" class="ai-meta"></div>
             <div class="ai-ask">
-              <input
-                id="ai-ask-input"
-                placeholder="Ask about any item — e.g. 'is ancient_debris worth buying?'"
-              />
-              <button class="button primary" id="ai-ask-btn">Ask</button>
+              <input id="ai-ask-input" placeholder="Ask about any item…" />
+              <button id="ai-ask-btn" class="btn-primary">Ask</button>
             </div>
-            <div id="ai-ask-answer" class="mono-list"></div>
-          </article>
+            <div id="ai-ask-answer" class="ai-answer"></div>
+          </section>
 
-          <div class="dashboard-grid">
-            <article class="panel panel-wide">
-              <div class="panel-head">
-                <div>
-                  <p class="kicker">Filtered</p>
-                  <h3>Top flips</h3>
-                </div>
-                <button class="text-button" data-go="opportunities">View all →</button>
-              </div>
-              <div id="top-flips" class="opportunity-list loading-block"></div>
+          <div class="grid-2">
+            <article class="card span-2">
+              <header>
+                <span class="eyebrow">Top opportunities</span>
+                <strong>Best flips (low risk first)</strong>
+                <button class="btn-text" data-go="opportunities">View all →</button>
+              </header>
+              <div id="top-flips" class="list"><div class="loading">Loading…</div></div>
             </article>
-            <article class="panel">
-              <div class="panel-head">
-                <div>
-                  <p class="kicker">Live</p>
-                  <h3>Pulse</h3>
-                </div>
-              </div>
-              <div id="active-market" class="compact-list loading-block"></div>
+            <article class="card">
+              <header>
+                <span class="eyebrow">Market pulse</span>
+                <strong>Most active</strong>
+              </header>
+              <div id="active-market" class="list"><div class="loading">Loading…</div></div>
             </article>
-            <article class="panel">
-              <div class="panel-head">
-                <div>
-                  <p class="kicker">24h</p>
-                  <h3>Movers</h3>
-                </div>
-              </div>
-              <div id="movers" class="compact-list loading-block"></div>
+            <article class="card">
+              <header>
+                <span class="eyebrow">Movers</span>
+                <strong>24h change</strong>
+              </header>
+              <div id="movers" class="list"><div class="loading">Loading…</div></div>
             </article>
-            <article class="panel panel-wide">
-              <div class="panel-head">
-                <div>
-                  <p class="kicker">Coverage</p>
-                  <h3>Health</h3>
-                </div>
-              </div>
+            <article class="card span-2">
+              <header>
+                <span class="eyebrow">Coverage</span>
+                <strong>Data health</strong>
+              </header>
               <div id="data-health" class="health-grid"></div>
             </article>
           </div>
 
-          <div class="dashboard-grid dashboard-grid--2">
-            <article class="panel panel-wide">
-              <div class="panel-head">
-                <div>
-                  <p class="kicker">Model</p>
-                  <h3>Predictions</h3>
-                </div>
-              </div>
-              <div id="predictions" class="compact-list loading-block"></div>
+          <div class="grid-2">
+            <article class="card span-2">
+              <header>
+                <span class="eyebrow">Neural network</span>
+                <strong>24h predictions</strong>
+              </header>
+              <div id="predictions" class="list"><div class="loading">Loading…</div></div>
             </article>
-            <article class="panel">
-              <div class="panel-head">
-                <div>
-                  <p class="kicker">Training</p>
-                  <h3>Status</h3>
-                </div>
-              </div>
-              <div id="nn-status" class="compact-list loading-block"></div>
+            <article class="card">
+              <header>
+                <span class="eyebrow">Training</span>
+                <strong>Net status</strong>
+              </header>
+              <div id="nn-status" class="list"><div class="loading">Loading…</div></div>
             </article>
           </div>
 
-          <div class="dashboard-grid">
-            <article class="panel panel-wide">
-              <div class="panel-head">
-                <div>
-                  <p class="kicker">Outliers</p>
-                  <h3>Price outliers</h3>
-                </div>
-              </div>
-              <div id="outliers-list" class="compact-list loading-block"></div>
-            </article>
-          </div>
+          <article class="card span-2">
+            <header>
+              <span class="eyebrow">Outliers</span>
+              <strong>Statistical outliers (Z &amp; IQR)</strong>
+            </header>
+            <div id="outliers-list" class="list"><div class="loading">Loading…</div></div>
+          </article>
         </section>
 
-        <!-- Opportunities -->
-        <section id="view-opportunities" class="view">
-          <div class="section-intro">
-            <div>
-              <p class="kicker">Filtered</p>
-              <h2>Opportunities</h2>
-              <p>Every estimate includes tax, filtered prices, and a risk score.</p>
-            </div>
-          </div>
+        <!-- OPPORTUNITIES -->
+        <section id="view-opportunities" class="view" data-view="opportunities">
+          <header class="page-header">
+            <span class="eyebrow">Filtered</span>
+            <h2>Opportunities</h2>
+            <p>Sorted by lowest risk first. Includes tax, filtered prices, confidence.</p>
+          </header>
           <div class="toolbar">
-            <label class="search-field">⌕<input id="flip-search" placeholder="Search an item" /></label>
+            <input id="flip-search" type="text" placeholder="Search item…" />
             <select id="flip-type">
               <option value="">All</option>
-              <option value="snipe">Snipes</option>
-              <option value="craft">Crafting</option>
+              <option value="snipe">Snipe</option>
+              <option value="craft">Craft</option>
             </select>
             <select id="flip-profit">
               <option value="0">Any profit</option>
@@ -317,20 +194,18 @@
               <option value="1000000">1M+</option>
             </select>
           </div>
-          <div id="flip-grid" class="cards-grid"></div>
+          <div id="flip-grid" class="flip-grid"></div>
         </section>
 
-        <!-- Explorer -->
-        <section id="view-market" class="view">
-          <div class="section-intro">
-            <div>
-              <p class="kicker">Fair value</p>
-              <h2>Explorer</h2>
-              <p>Floor vs fair value, variant-aware (enchants and shulker contents split).</p>
-            </div>
-          </div>
+        <!-- MARKET EXPLORER -->
+        <section id="view-market" class="view" data-view="market">
+          <header class="page-header">
+            <span class="eyebrow">Explorer</span>
+            <h2>Market</h2>
+            <p>Floor vs fair value, variant-aware.</p>
+          </header>
           <div class="toolbar">
-            <label class="search-field">⌕<input id="market-search" placeholder="Search the market" /></label>
+            <input id="market-search" type="text" placeholder="Search market…" />
             <select id="market-sort">
               <option value="salesValue">Highest turnover</option>
               <option value="sales">Most sales</option>
@@ -340,17 +215,17 @@
               <option value="confidence">Highest confidence</option>
             </select>
           </div>
-          <div class="table-panel">
-            <table>
+          <div class="table-wrap">
+            <table id="market-table">
               <thead>
                 <tr>
-                  <th>Asset</th>
+                  <th>Item</th>
                   <th>Floor</th>
                   <th>Fair</th>
                   <th>Sales</th>
                   <th>Turnover</th>
-                  <th>Momentum</th>
-                  <th>Confidence</th>
+                  <th>Change</th>
+                  <th>Conf</th>
                 </tr>
               </thead>
               <tbody id="market-body"></tbody>
@@ -358,25 +233,19 @@
           </div>
         </section>
 
-        <!-- Sales -->
-        <section id="view-sales" class="view">
-          <div class="section-intro">
-            <div>
-              <p class="kicker">Proof of price</p>
-              <h2>Sales</h2>
-              <p>Completed transactions — not asking prices.</p>
-            </div>
-          </div>
-          <div class="toolbar">
-            <label class="search-field"
-              >⌕<input id="sales-search" placeholder="Filter completed sales"
-            /></label>
-          </div>
-          <div class="table-panel">
-            <table>
+        <!-- SALES -->
+        <section id="view-sales" class="view" data-view="sales">
+          <header class="page-header">
+            <span class="eyebrow">Proof of price</span>
+            <h2>Sales</h2>
+            <p>Completed transactions — not asking prices.</p>
+          </header>
+          <input id="sales-search" type="text" placeholder="Filter sales…" />
+          <div class="table-wrap">
+            <table id="sales-table">
               <thead>
                 <tr>
-                  <th>Asset</th>
+                  <th>Item</th>
                   <th>Stack</th>
                   <th>Total</th>
                   <th>Unit</th>
@@ -390,17 +259,42 @@
           </div>
         </section>
 
-        <!-- Neural -->
-        <section id="view-neural" class="view">
-          <div class="section-intro">
-            <div>
-              <p class="kicker">Forecast</p>
-              <h2>Neural</h2>
-              <p>Confidence-weighted 24h predictions. Updated every scan.</p>
-            </div>
+        <!-- NEURAL (LIVE TRAINING VIEW) -->
+        <section id="view-neural" class="view" data-view="neural">
+          <header class="page-header">
+            <span class="eyebrow">Always training</span>
+            <h2>Neural network</h2>
+            <p>Predicts 24h price moves. Trains on every scan completion.</p>
+          </header>
+
+          <div class="neural-grid">
+            <article class="card span-2">
+              <header>
+                <span class="eyebrow">Live</span>
+                <strong>Training activity</strong>
+              </header>
+              <div id="nn-live" class="nn-live"></div>
+            </article>
+
+            <article class="card">
+              <header>
+                <span class="eyebrow">Loss</span>
+                <strong>Price predictor</strong>
+              </header>
+              <div id="nn-loss-chart" class="chart-box"></div>
+            </article>
+
+            <article class="card">
+              <header>
+                <span class="eyebrow">Architecture</span>
+                <strong>Net layers</strong>
+              </header>
+              <div id="nn-arch" class="nn-arch"></div>
+            </article>
           </div>
+
           <div class="toolbar">
-            <label class="search-field">⌕<input id="nn-search" placeholder="Search predictions" /></label>
+            <input id="nn-search" type="text" placeholder="Search predictions…" />
             <select id="nn-filter">
               <option value="all">All</option>
               <option value="up">Trending up</option>
@@ -408,128 +302,78 @@
               <option value="high-conf">High confidence</option>
             </select>
           </div>
-          <div class="table-panel">
-            <table>
+          <div class="table-wrap">
+            <table id="nn-table">
               <thead>
                 <tr>
-                  <th>Asset</th>
+                  <th>Item</th>
                   <th>Current</th>
                   <th>Predicted</th>
                   <th>Change</th>
                   <th>Trend</th>
-                  <th>Confidence</th>
-                  <th>Signal</th>
+                  <th>Conf</th>
                 </tr>
               </thead>
               <tbody id="nn-body"></tbody>
             </table>
           </div>
-          <div class="panel" style="margin-top: 12px">
-            <div class="panel-head"><h3>Training history</h3></div>
-            <div id="training-chart" class="training-chart"></div>
-          </div>
         </section>
 
-        <!-- Anomalies -->
-        <section id="view-anomalies" class="view">
-          <div class="section-intro">
-            <div>
-              <p class="kicker">Anomaly</p>
-              <h2>Anomalies</h2>
-              <p>Statistically unusual price moves from the anomaly model.</p>
-            </div>
-          </div>
-          <div class="cards-grid" id="anomalies-grid"></div>
+        <!-- ANOMALIES -->
+        <section id="view-anomalies" class="view" data-view="anomalies">
+          <header class="page-header">
+            <span class="eyebrow">Outliers</span>
+            <h2>Anomalies</h2>
+            <p>Statistically unusual price moves (Z-score &gt; 2 or IQR).</p>
+          </header>
+          <div id="anomalies-grid" class="anomaly-grid"></div>
         </section>
 
-        <!-- Charts -->
-        <section id="view-charts" class="view">
-          <div class="section-intro">
-            <div>
-              <p class="kicker">History</p>
-              <h2>Charts</h2>
-              <p>Price history with moving averages and neural overlay.</p>
-            </div>
+        <!-- CHARTS -->
+        <section id="view-charts" class="view" data-view="charts">
+          <header class="page-header">
+            <span class="eyebrow">History</span>
+            <h2>Charts</h2>
+            <p>Price history for any item, variant-aware.</p>
+          </header>
+          <input id="chart-search" type="text" placeholder="Search item…" />
+          <input id="chart-item" type="hidden" />
+          <div class="card">
+            <header><strong id="chart-title">Select an item</strong></header>
+            <div class="chart-box"><canvas id="price-chart"></canvas></div>
           </div>
-          <div class="toolbar">
-            <label class="search-field">⌕<input id="chart-search" placeholder="Search item" /></label>
-            <select id="chart-timeframe">
-              <option value="24h">24 hours</option>
-              <option value="7d">7 days</option>
-              <option value="30d">30 days</option>
-            </select>
-          </div>
-          <div class="panel" style="margin-top: 12px">
-            <div class="panel-head"><h3 id="chart-title">Select an item</h3></div>
-            <canvas id="price-chart" height="400"></canvas>
-          </div>
-          <div class="dashboard-grid dashboard-grid--2" style="margin-top: 12px">
-            <article class="panel">
-              <div class="panel-head"><h3>Indicators</h3></div>
-              <div id="chart-indicators"></div>
+          <div class="grid-2">
+            <article class="card">
+              <header><strong>Indicators</strong></header>
+              <div id="chart-indicators" class="list"></div>
             </article>
-            <article class="panel">
-              <div class="panel-head"><h3>Neural overlay</h3></div>
-              <div id="chart-nn"></div>
+            <article class="card">
+              <header><strong>Neural overlay</strong></header>
+              <div id="chart-nn" class="list"></div>
             </article>
           </div>
         </section>
 
-        <!-- Item -->
-        <section id="view-item" class="view">
-          <div class="section-intro">
-            <div>
-              <p class="kicker">Item</p>
-              <h2 id="item-title">Item detail</h2>
-              <p>Variant-aware: enchantments and shulker contents are split.</p>
-            </div>
-          </div>
-          <div class="dashboard-grid">
-            <article class="panel panel-wide">
-              <div class="panel-head"><h3>Summary</h3></div>
-              <div id="item-summary"></div>
-            </article>
-            <article class="panel">
-              <div class="panel-head"><h3>Listings</h3></div>
-              <div id="item-listings"></div>
-            </article>
-            <article class="panel">
-              <div class="panel-head"><h3>Sales</h3></div>
-              <div id="item-sales"></div>
-            </article>
-            <article class="panel">
-              <div class="panel-head"><h3>Enchantments</h3></div>
-              <div id="item-enchants"></div>
-            </article>
-            <article class="panel">
-              <div class="panel-head"><h3>Shulker contents</h3></div>
-              <div id="item-shulker"></div>
-            </article>
-            <article class="panel panel-wide">
-              <div class="panel-head"><h3>History</h3></div>
-              <canvas id="item-chart" height="250"></canvas>
-            </article>
-          </div>
-        </section>
-
-        <!-- Players -->
-        <section id="view-players" class="view">
-          <div class="section-intro">
-            <div>
-              <p class="kicker">Public</p>
-              <h2>Players</h2>
-              <p>Public economy and activity profile.</p>
-            </div>
-          </div>
-          <form class="player-search" id="player-form">
-            <input id="player-name" placeholder="Minecraft username" maxlength="36" required />
-            <button class="button primary">Look up</button>
+        <!-- PLAYERS -->
+        <section id="view-players" class="view" data-view="players">
+          <header class="page-header">
+            <span class="eyebrow">Public</span>
+            <h2>Player lookup</h2>
+            <p>Stats from DonutSMP API.</p>
+          </header>
+          <form id="player-form" class="player-form">
+            <input id="player-name" type="text" placeholder="Minecraft username" maxlength="36" required />
+            <button type="submit" class="btn-primary">Look up</button>
           </form>
-          <div id="player-results" class="player-results empty-message">Search for a player.</div>
+          <div id="player-results" class="player-results">
+            <div class="placeholder">Search for a player.</div>
+          </div>
         </section>
       </main>
     </div>
-    <div class="toast-region" id="toast-region" aria-live="polite"></div>
+
+    <div id="toast-region" class="toast-region" aria-live="polite"></div>
+
     <script src="/socket.io/socket.io.js"></script>
     <script src="/js/app.js"></script>
   </body>
