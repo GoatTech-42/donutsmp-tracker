@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "NODE_ENV=development node --watch server.js",
-    "test": "node --test",
+    "test": "node --test test/*.test.js",
     "check": "node --check server.js && node --check lib/analyzer.js && node --check lib/donutsmp.js && node --check public/js/app.js"
   },
   "dependencies": {

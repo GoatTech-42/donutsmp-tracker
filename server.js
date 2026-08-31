@@ -59,8 +59,23 @@ app.get('/api/health', (req, res) =>
 )
 app.get('/api/status', (req, res) => res.json(publicStatus()))
 
+// Cache the expensive intelligence computation. It's recomputed on every
+// /api/overview, /api/flips, /api/outliers, /api/neural/*, and /api/ai/*
+// call AND hit by the 45s poll + every socket scan:update. Recompute only
+// when the scan advances (scanCount bumps) so a burst of requests doesn't
+// re-run detectFlips + neural predictions 5× over the same data.
+let intelCache = { key: null, value: null }
+function cachedIntelligence() {
+  const key = state.scanCount
+  if (intelCache.key !== key || !intelCache.value) {
+    intelCache.value = analyzer.getIntelligence(state.auctions, state.transactions)
+    intelCache.key = key
+  }
+  return intelCache.value
+}
+
 app.get('/api/overview', (req, res) =>
-  res.json({ ...analyzer.getIntelligence(state.auctions, state.transactions), status: publicStatus() })
+  res.json({ ...cachedIntelligence(), status: publicStatus() })
 )
 app.get('/api/flips', (req, res) => {
   let flips = analyzer.detectFlips(state.auctions, state.transactions)
@@ -167,7 +182,7 @@ app.get(
 
 // Neural Network endpoints
 app.get('/api/neural/stats', (req, res) => {
-  const intel = analyzer.getIntelligence(state.auctions, state.transactions)
+  const intel = cachedIntelligence()
   res.json(intel.neuralNet)
 })
 
@@ -185,7 +200,7 @@ app.get('/api/flip-history', (req, res) => {
 
 app.get('/api/export', (req, res) => {
   const format = req.query.format || 'json'
-  const intel = analyzer.getIntelligence(state.auctions, state.transactions)
+  const intel = cachedIntelligence()
   if (format === 'csv') {
     const flips = intel.topFlips
     const csvEscape = v => {
@@ -241,7 +256,7 @@ app.get('/api/enchant-trends/:enchant', (req, res) => {
 })
 
 app.get('/api/neural/predictions', (req, res) => {
-  const intel = analyzer.getIntelligence(state.auctions, state.transactions)
+  const intel = cachedIntelligence()
   res.json({
     predictions: intel.predictions,
     anomalies: intel.anomalies,
@@ -279,7 +294,7 @@ app.post(
     }
     if (!process.env.GROQ_API_KEY)
       return res.status(503).json({ error: 'AI not configured (missing GROQ_API_KEY)' })
-    const intel = analyzer.getIntelligence(state.auctions, state.transactions)
+    const intel = cachedIntelligence()
     const t0 = Date.now()
     const result = await ai.analyze(intel)
     const body = {
@@ -302,7 +317,7 @@ app.post(
       .trim()
       .slice(0, 1000)
     if (!question) return res.status(400).json({ error: 'Question is required' })
-    const intel = analyzer.getIntelligence(state.auctions, state.transactions)
+    const intel = cachedIntelligence()
     const nnContext = JSON.stringify({
       summary: intel.summary,
       topFlips: intel.topFlips.slice(0, 5),
