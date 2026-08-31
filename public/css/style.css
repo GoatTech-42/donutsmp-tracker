@@ -494,8 +494,8 @@ nav {
 .grid-2 {
   display: grid;
   grid-template-columns: 2fr 1fr 1fr;
-  gap: 14px;
-  margin-bottom: 14px;
+  gap: 16px;
+  margin-bottom: 20px;
 }
 
 .span-2 {
@@ -505,6 +505,17 @@ nav {
 .grid-2 > article:last-child,
 .grid-2 > .span-2 + article + .span-2 {
   grid-column: span 2;
+}
+
+/* Overview sections: clear vertical separation so AI panel, top flips,
+   and market pulse don't feel squished together. */
+#view-overview > .card,
+#view-overview > .grid-2,
+#view-overview > .metric-grid {
+  margin-bottom: 20px;
+}
+#ai-panel {
+  margin-bottom: 20px;
 }
 
 .grid-2:has(> .span-2:only-child) {
