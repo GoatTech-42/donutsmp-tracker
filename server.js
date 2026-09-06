@@ -90,6 +90,32 @@ app.get('/api/flips', (req, res) => {
   res.json({ flips, total: flips.length, generatedAt: new Date().toISOString() })
 })
 
+app.get('/api/invest', (req, res) => {
+  const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 15))
+  const market = analyzer.buildMarket(state.auctions, state.transactions)
+  const ranked = market.map(item => {
+    const inv = analyzer.computeInvestability(item)
+    return {
+      name: item.name,
+      baseName: item.baseName,
+      variantLabel: item.variantLabel,
+      isEnchanted: item.isEnchanted,
+      score: inv.score,
+      floor: item.floor,
+      fairValue: item.fairValue,
+      listings: item.listings,
+      sales: item.sales,
+      change: item.change,
+      volatility: item.volatility,
+      confidence: item.confidence,
+      prediction: inv.prediction,
+      flip: inv.flip ? { type: inv.flip.type, profit: inv.flip.profit, roi: inv.flip.roi, score: inv.flip.score } : null,
+      risk: inv.risk
+    }
+  }).sort((a, b) => b.score - a.score).slice(0, limit)
+  res.json({ ranked, generatedAt: new Date().toISOString(), horizon: analyzer.predictor.horizon, totalItems: market.length })
+})
+
 app.get('/api/market', (req, res) => {
   let rows = analyzer.buildMarket(state.auctions, state.transactions)
   const search = String(req.query.search || '').toLowerCase()
@@ -377,7 +403,28 @@ async function runScan() {
       state.auctions = rows.length > KEEP ? rows.slice(-KEEP) : rows
       io.emit('scan:partial', publicStatus())
     }
-    auctions = await api.fetchAllAuctions(800, onProgress, onAuctionPartial)
+    // Publish partial transaction state so completed sales are visible ~30s in
+    // rather than staying 0 until the full auction pass completes. Mirrors
+    // onAuctionPartial; the analyzer's flip detection is unaffected (it uses the
+    // local full `transactions` array at scan end).
+    const onTransactionPartial = rows => {
+      const KEEP = 5000
+      // Sort newest-first so mid-scan /api/transactions pagination is stable and
+      // matches the sorted array the full scan assigns at completion.
+      const sorted = rows.slice().sort((a, b) => (b.dateSold || 0) - (a.dateSold || 0))
+      state.transactions = sorted.length > KEEP ? sorted.slice(-KEEP) : sorted
+      io.emit('scan:partial', publicStatus())
+    }
+    // Fetch auctions + transactions in PARALLEL so completed sales arrive the same
+    // scan they're captured. Sequential fetching kept `transactions` empty for the
+    // ~10 min auction pass, which left fairValue unanchored (sales_median missing)
+    // and let troll listings leak onto the board as confident flips.
+    const [auctionRows, transactionRows] = await Promise.all([
+      api.fetchAllAuctions(800, onProgress, onAuctionPartial),
+      api.fetchTransactions(400, onProgress, onTransactionPartial)
+    ])
+    auctions = auctionRows
+    transactions = transactionRows
     if (auctions.length >= 500) {
       // Let the analyzer start building priceHistory even before transactions arrive,
       // so the progressive trainPredictor thresholds can fire and we don't sit at 0 epochs
@@ -386,7 +433,6 @@ async function runScan() {
         analyzer.storePartialAuctions(auctions)
       } catch (_) {}
     }
-    transactions = await api.fetchTransactions(400, onProgress)
     if (!auctions.length) throw new Error('Upstream returned no auctions')
     // Cap in-memory raw rows — analyzer's SQLite snapshot has the full history;
     // these are only needed by live API endpoints while a scan runs.

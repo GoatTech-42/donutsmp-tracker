@@ -7,6 +7,7 @@ COPY package.json package-lock.json* ./
 RUN npm install --omit=dev
 # Copy each lib file individually — Docker's COPY handles .dockerignore properly
 COPY lib/ ./lib/
+COPY worker/ ./worker/
 COPY public/ ./public/
 COPY server.js ./
 RUN mkdir -p /app/data && chown -R node:node /app/data
