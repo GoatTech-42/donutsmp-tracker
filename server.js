@@ -1,5 +1,6 @@
 const express = require('express')
 const http = require('http')
+const fs = require('fs')
 const path = require('path')
 const { Server } = require('socket.io')
 const AuctionAnalyzer = require('./lib/analyzer')
@@ -362,6 +363,61 @@ app.post(
   })
 )
 
+
+// --- DonutSMP API key revival via mc-headless ---
+const MC_REVIVE_URL = process.env.MC_REVIVE_URL || ''
+const MC_REVIVE_TOKEN = process.env.MC_REVIVE_TOKEN || ''
+const KEY_FILE = path.join(path.dirname(process.env.DB_PATH || path.join(__dirname, 'data', 'pulse.db')), 'donutsmp.key')
+let reviveNextAt = 0
+async function requestKeyRevival() {
+  if (!MC_REVIVE_URL || !MC_REVIVE_TOKEN) return
+  const now = Date.now()
+  if (now < reviveNextAt) return
+  reviveNextAt = now + 30 * 60 * 1000 // local throttle; mc-headless enforces its own cooldown
+  try {
+    const r = await fetch(MC_REVIVE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${MC_REVIVE_TOKEN}` },
+      body: JSON.stringify({ callback_url: `http://172.17.0.1:${PORT}/api/key` })
+    })
+    const d = await r.json().catch(() => ({}))
+    if (r.status === 429 && d.retry_after_sec) reviveNextAt = now + d.retry_after_sec * 1000
+    console.log('[Revive] mc-headless responded', r.status, JSON.stringify(d).slice(0, 200))
+  } catch (e) {
+    console.error('[Revive] request failed:', e.message)
+  }
+}
+function loadPersistedKey() {
+  try {
+    const k = fs.readFileSync(KEY_FILE, 'utf8').trim()
+    if (/^[0-9a-fA-F]{32}$/.test(k)) {
+      api.setApiKey(k)
+      console.log('[Revive] loaded persisted DonutSMP key from data volume')
+    }
+  } catch (_) {}
+}
+
+app.post(
+  '/api/key',
+  asyncRoute(async (req, res) => {
+    const h = req.headers.authorization || ''
+    if (!MC_REVIVE_TOKEN || h !== `Bearer ${MC_REVIVE_TOKEN}`)
+      return res.status(401).json({ error: 'auth required' })
+    const key = typeof req.body?.key === 'string' ? req.body.key.trim() : ''
+    if (!/^[0-9a-fA-F]{32}$/.test(key)) return res.status(400).json({ error: 'key must be 32 hex chars' })
+    try {
+      fs.writeFileSync(KEY_FILE, key + '\n', { mode: 0o600 })
+    } catch (e) {
+      return res.status(500).json({ error: 'persist failed' })
+    }
+    api.setApiKey(key)
+    state.authDead = false
+    state.lastError = null
+    res.json({ ok: true })
+    if (!state.scanning) runScan().catch(err => console.error('[Scanner] post-key scan failed:', err.message))
+  })
+)
+
 app.post(
   '/api/refresh',
   asyncRoute(async (req, res) => {
@@ -469,7 +525,9 @@ async function runScan() {
       } catch (_) {}
     }
   } catch (error) {
+    const wasAuthDead = state.authDead
     state.authDead = /401|403|unauthorized/i.test(error.message)
+    if (state.authDead && !wasAuthDead) requestKeyRevival().catch(() => {})
     state.lastError = state.authDead
       ? 'DonutSMP API key rejected (401) - regenerate in game with /api'
       : error.message
@@ -484,6 +542,7 @@ async function runScan() {
 
 let scanTimer
 async function start() {
+  loadPersistedKey()
   server.listen(PORT, '0.0.0.0', () =>
     console.log(`[Pulse] listening on http://0.0.0.0:${PORT} (${state.source} data)`)
   )
