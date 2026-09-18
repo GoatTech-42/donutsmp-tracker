@@ -378,7 +378,7 @@ async function requestKeyRevival() {
     const r = await fetch(MC_REVIVE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${MC_REVIVE_TOKEN}` },
-      body: JSON.stringify({ callback_url: `http://172.17.0.1:${PORT}/api/key` })
+      body: JSON.stringify({ callback_url: process.env.MC_REVIVE_CALLBACK_URL || `http://172.17.0.1:${PORT}/api/key` })
     })
     const d = await r.json().catch(() => ({}))
     if (r.status === 429 && d.retry_after_sec) reviveNextAt = now + d.retry_after_sec * 1000
