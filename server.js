@@ -378,7 +378,7 @@ async function requestKeyRevival() {
     const r = await fetch(MC_REVIVE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${MC_REVIVE_TOKEN}` },
-      body: JSON.stringify({ callback_url: process.env.MC_REVIVE_CALLBACK_URL || `http://172.17.0.1:${PORT}/api/key` })
+      body: JSON.stringify({ callback_url: process.env.MC_REVIVE_CALLBACK_URL || 'http://172.17.0.1:4201/api/key' })
     })
     const d = await r.json().catch(() => ({}))
     if (r.status === 429 && d.retry_after_sec) reviveNextAt = now + d.retry_after_sec * 1000
@@ -525,9 +525,10 @@ async function runScan() {
       } catch (_) {}
     }
   } catch (error) {
-    const wasAuthDead = state.authDead
     state.authDead = /401|403|unauthorized/i.test(error.message)
-    if (state.authDead && !wasAuthDead) requestKeyRevival().catch(() => {})
+    // Retry whenever the key is dead, not just on the flip: requestKeyRevival
+    // self-throttles via reviveNextAt and honors mc-headless 429 cooldowns.
+    if (state.authDead) requestKeyRevival().catch(() => {})
     state.lastError = state.authDead
       ? 'DonutSMP API key rejected (401) - regenerate in game with /api'
       : error.message
