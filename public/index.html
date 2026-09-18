@@ -10,7 +10,7 @@
     <meta name="theme-color" content="#0c0e14" />
     <link rel="icon" type="image/jpeg" href="/logo.jpg" />
     <title>Pulse — DonutSMP</title>
-    <link rel="stylesheet" href="/css/style.css?v=5" />
+    <link rel="stylesheet" href="/css/style.css?v=6" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   </head>
   <body>
@@ -373,5 +373,26 @@
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="/js/app.js?v=5"></script>
+
+    <div id="shutoff" class="shutoff hidden" role="alertdialog" aria-modal="true" aria-labelledby="shutoff-title">
+      <div class="shutoff-card">
+        <svg class="shutoff-ecg" viewBox="0 0 120 30" width="120" height="30" aria-hidden="true">
+          <path d="M0 15 H30 L38 15 L44 4 L52 26 L58 15 H120" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <h1 id="shutoff-title">Pulse is offline</h1>
+        <p class="shutoff-lead">The DonutSMP API key expired, so the market feed has flatlined. Everything else is fine - price history and neural weights are safe on disk.</p>
+        <div class="shutoff-steps">
+          <b>Bring it back:</b>
+          <ol>
+            <li>Open Minecraft and join DonutSMP</li>
+            <li>Run <code>/api</code> to mint a fresh key</li>
+            <li>Send the new key to Instinct</li>
+          </ol>
+        </div>
+        <p class="shutoff-note">Pulse resumes by itself as soon as a valid key is in place.</p>
+        <button id="shutoff-dismiss" class="shutoff-btn">View the stale dashboard</button>
+      </div>
+    </div>
+    <button id="shutoff-banner" class="shutoff-banner hidden">Pulse is offline - API key expired. Tap for details.</button>
   </body>
 </html>

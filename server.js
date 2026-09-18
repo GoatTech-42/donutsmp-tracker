@@ -21,6 +21,7 @@ const state = {
   lastScan: null,
   lastSuccess: null,
   lastError: null,
+  authDead: false,
   source: 'live'
 }
 
@@ -389,7 +390,8 @@ function publicStatus() {
     scanning: state.scanning,
     lastScan: state.lastScan,
     lastSuccess: state.lastSuccess,
-    lastError: state.lastError
+    lastError: state.lastError,
+    authDead: state.authDead
   }
 }
 
@@ -449,6 +451,7 @@ async function runScan() {
     state.scanCount += 1
     state.lastSuccess = new Date().toISOString()
     state.lastError = null
+    state.authDead = false
     analyzer.addSnapshot(auctions, transactions)
 
     // Track flips found in this scan
@@ -466,7 +469,8 @@ async function runScan() {
       } catch (_) {}
     }
   } catch (error) {
-    state.lastError = /401|403|unauthorized/i.test(error.message)
+    state.authDead = /401|403|unauthorized/i.test(error.message)
+    state.lastError = state.authDead
       ? 'DonutSMP API key rejected (401) - regenerate in game with /api'
       : error.message
     console.error('[Scanner]', error.message)
@@ -474,6 +478,7 @@ async function runScan() {
   } finally {
     state.scanning = false
     io.emit('scan:update', publicStatus())
+    io.emit('scan:status', publicStatus())
   }
 }
 

@@ -269,11 +269,14 @@ function bindOpenItem(scope) {
 }
 
 function renderStatus(status) {
+  updateShutoff(status)
   const live = !status.scanning && !status.lastError
   $('#source-label').textContent = live ? 'DonutSMP API' : status.scanning ? 'Live' : 'Degraded'
-  $('#source-note').textContent = status.scanning
-    ? 'Fetching market data…'
-    : 'Live auction and transaction data.'
+  $('#source-note').textContent = status.authDead
+    ? 'API key expired - offline'
+    : status.scanning
+      ? 'Fetching market data…'
+      : 'Live auction and transaction data.'
   $('#scan-count').textContent = `Scan #${status.scanCount || 0}`
   $('#last-scan').textContent = relative(status.lastSuccess)
   $('#feed-status').textContent = status.scanning ? 'Scanning' : status.lastError ? 'Degraded' : 'Live'
@@ -282,6 +285,30 @@ function renderStatus(status) {
   const prog = $('#scan-progress')
   if (prog) prog.classList.toggle('active', !!status.scanning)
 }
+
+/* ---------- SHUTOFF MODE (dead API key) ---------- */
+let shutoffDismissed = false
+function updateShutoff(status) {
+  const dead = !!status.authDead
+  if (!dead) shutoffDismissed = false
+  $('#shutoff')?.classList.toggle('hidden', !dead || shutoffDismissed)
+  $('#shutoff-banner')?.classList.toggle('hidden', !dead || !shutoffDismissed)
+}
+$('#shutoff-dismiss')?.addEventListener('click', () => {
+  shutoffDismissed = true
+  $('#shutoff')?.classList.add('hidden')
+  $('#shutoff-banner')?.classList.remove('hidden')
+})
+$('#shutoff-banner')?.addEventListener('click', () => {
+  shutoffDismissed = false
+  $('#shutoff-banner')?.classList.add('hidden')
+  $('#shutoff')?.classList.remove('hidden')
+})
+// Seed the shutoff state on first paint - socket events only arrive on scans.
+fetch('/api/status')
+  .then(r => (r.ok ? r.json() : null))
+  .then(s => s && updateShutoff(s))
+  .catch(() => {})
 
 /* ---------- OPPORTUNITIES ---------- */
 async function loadOpportunities() {
