@@ -52,7 +52,14 @@ const asyncRoute = handler => (req, res, next) => Promise.resolve(handler(req, r
 
 app.get('/api/health', (req, res) =>
   res.json({
-    status: state.lastError && !state.lastSuccess ? 'degraded' : 'ok',
+    // Degraded when the latest scan failed and data is stale (or never
+    // succeeded): a success 6 days ago must not report ok forever.
+    status:
+      state.lastError &&
+      (!state.lastSuccess ||
+        Date.now() - new Date(state.lastSuccess).getTime() > 3 * SCAN_INTERVAL)
+        ? 'degraded'
+        : 'ok',
     ...publicStatus(),
     uptime: Math.round(process.uptime())
   })
@@ -459,7 +466,9 @@ async function runScan() {
       } catch (_) {}
     }
   } catch (error) {
-    state.lastError = error.message
+    state.lastError = /401|403|unauthorized/i.test(error.message)
+      ? 'DonutSMP API key rejected (401) - regenerate in game with /api'
+      : error.message
     console.error('[Scanner]', error.message)
     throw error
   } finally {
